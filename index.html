@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="JET Journal Entry Trainer - Practice accounting journal entries" />
+    <title>JET Journal Trainer</title>
+
+    <!-- DNS prefetch for external resources -->
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
+    <link rel="dns-prefetch" href="https://accounts.google.com" />
+    <link rel="preconnect" href="https://accounts.google.com" crossorigin />
+
+    <!-- Preconnect for fonts (high priority) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- Font loading with display=swap for non-blocking render -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- Preload the main entry for faster startup -->
+    <link rel="modulepreload" href="/src/web/main.tsx" />
+
+    <!-- Theme restoration (prevents FOUC) -->
+    <script>
+      (function() {
+        var t = localStorage.getItem('jet-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
+
+    <!-- Performance: mark navigation start -->
+    <script>
+      if (window.performance && window.performance.mark) {
+        window.performance.mark('app-head-start');
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/web/main.tsx"></script>
+
+    <!-- Performance: mark body end -->
+    <script>
+      if (window.performance && window.performance.mark) {
+        window.performance.mark('app-body-end');
+      }
+    </script>
+  </body>
+</html>

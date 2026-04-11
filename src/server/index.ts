@@ -88,7 +88,10 @@ async function buildServer(config: ServerRuntimeConfig) {
     platformStore.initialize()
   ]);
   await app.register(helmet, {
-    contentSecurityPolicy: false
+    contentSecurityPolicy: false,
+    crossOriginOpenerPolicy: {
+      policy: "same-origin-allow-popups"
+    }
   });
   await app.register(compress, {
     global: true,

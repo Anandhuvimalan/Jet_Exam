@@ -342,9 +342,9 @@ async function buildServer(config: ServerRuntimeConfig) {
     }
   });
 
-  // Google Identity Services redirect callback at root URL
-  // When ux_mode is "redirect", Google POSTs the credential here as form-urlencoded
-  // GET / still serves the frontend (handled by static plugin), POST / handles auth
+  // Legacy Google Identity Services redirect fallback at root URL.
+  // The current frontend uses the credential callback flow, but keeping this
+  // handler allows older deployments or manual redirect-mode configs to work.
   app.post("/", async (request, reply) => {
     if (!config.googleClientId) {
       reply.code(503);

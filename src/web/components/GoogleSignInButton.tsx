@@ -149,39 +149,19 @@ export function GoogleSignInButton({
         const container = buttonRef.current;
         container.replaceChildren();
 
-        // Use redirect mode in production, popup mode for localhost
-        const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-        const callbackUrl = `${window.location.origin}/api/auth/google/callback`;
-
-        if (isLocalhost) {
-          // Popup mode works fine on localhost
-          window.google.accounts.id.initialize({
-            client_id: clientId,
-            callback: (response) => {
-              if (disabledRef.current || !response.credential) {
-                return;
-              }
-
-              onCredentialRef.current(response.credential);
+        // Use the direct credential callback flow in every environment.
+        // This keeps production aligned with local development and only
+        // requires the deployed frontend origin to be authorized in Google.
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: (response) => {
+            if (disabledRef.current || !response.credential) {
+              return;
             }
-          });
-        } else {
-          // Redirect mode avoids origin check issues on production
-          // Set a cookie so the server knows the intended role
-          document.cookie = `jet_auth_intent=${role};path=/;max-age=300;SameSite=Lax`;
-          window.google.accounts.id.initialize({
-            client_id: clientId,
-            ux_mode: "redirect",
-            login_uri: window.location.origin,
-            callback: (response) => {
-              if (disabledRef.current || !response.credential) {
-                return;
-              }
 
-              onCredentialRef.current(response.credential);
-            }
-          });
-        }
+            onCredentialRef.current(response.credential);
+          }
+        });
 
         window.google.accounts.id.renderButton(container, {
           type: "standard",

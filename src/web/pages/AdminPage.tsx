@@ -1,7 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
-import { createPortal } from "react-dom";
 import type {
   AdminAssistantMessage,
   AdminDashboardResponse,
@@ -87,17 +86,6 @@ interface AdminConfirmState {
   onConfirm: () => Promise<void>;
 }
 
-interface PickerOption {
-  value: string;
-  label: string;
-}
-
-interface PickerScrollSnapshot {
-  container: HTMLElement | null;
-  spacerTarget: HTMLElement;
-  spacerPaddingBottom: string;
-}
-
 const motionEase = [0.22, 1, 0.36, 1] as const;
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 const ADMIN_SECTION_META: Record<AdminSection, { label: string; eyebrow: string; title: string; copy: string }> = {
@@ -164,110 +152,6 @@ function createEmptyAdminDraft(): AdminDraft {
     name: "",
     email: ""
   };
-}
-
-function findScrollableAncestor(node: HTMLElement | null) {
-  let current = node?.parentElement ?? null;
-
-  while (current) {
-    const style = window.getComputedStyle(current);
-    const overflowY = style.overflowY === "visible" ? style.overflow : style.overflowY;
-    const scrollable = /(auto|scroll|overlay)/.test(overflowY)
-      && current.scrollHeight > current.clientHeight;
-
-    if (scrollable) {
-      return current;
-    }
-
-    current = current.parentElement;
-  }
-
-  return null;
-}
-
-function capturePickerScrollSnapshot(node: HTMLElement | null): PickerScrollSnapshot {
-  const container = findScrollableAncestor(node);
-  const spacerTarget = container ?? document.body;
-
-  return {
-    container,
-    spacerTarget,
-    spacerPaddingBottom: spacerTarget.style.paddingBottom
-  };
-}
-
-function ensurePickerScrollSpace(snapshot: PickerScrollSnapshot | null, requiredSpace: number) {
-  if (!snapshot || requiredSpace <= 0) {
-    return;
-  }
-
-  const currentPaddingBottom = Number.parseFloat(window.getComputedStyle(snapshot.spacerTarget).paddingBottom) || 0;
-  snapshot.spacerTarget.style.paddingBottom = `${Math.ceil(currentPaddingBottom + requiredSpace)}px`;
-}
-
-function restorePickerScrollSpace(snapshot: PickerScrollSnapshot | null) {
-  if (!snapshot) {
-    return;
-  }
-
-  snapshot.spacerTarget.style.paddingBottom = snapshot.spacerPaddingBottom;
-}
-
-function shiftPickerViewportForMenu(snapshot: PickerScrollSnapshot | null, triggerRect: DOMRect, menuHeight: number) {
-  const gutter = 12;
-  const gap = 8;
-  const availableBelow = Math.max(0, window.innerHeight - triggerRect.bottom - gutter - gap);
-  const overflow = Math.ceil(menuHeight - availableBelow);
-
-  if (overflow <= 0) {
-    return false;
-  }
-
-  const delta = overflow + gap;
-
-  if (snapshot?.container) {
-    const availableScroll = Math.max(0, snapshot.container.scrollHeight - snapshot.container.clientHeight - snapshot.container.scrollTop);
-    if (availableScroll < delta) {
-      ensurePickerScrollSpace(snapshot, delta - availableScroll + gap);
-    }
-
-    const nextTop = Math.min(
-      snapshot.container.scrollHeight - snapshot.container.clientHeight,
-      snapshot.container.scrollTop + delta
-    );
-
-    if (nextTop <= snapshot.container.scrollTop) {
-      return false;
-    }
-
-    snapshot.container.scrollTo({
-      left: snapshot.container.scrollLeft,
-      top: nextTop,
-      behavior: "auto"
-    });
-    return true;
-  }
-
-  const scrollingElement = document.scrollingElement;
-  const maxTop = scrollingElement ? scrollingElement.scrollHeight - window.innerHeight : window.scrollY;
-  const availableScroll = Math.max(0, maxTop - window.scrollY);
-  if (availableScroll < delta) {
-    ensurePickerScrollSpace(snapshot, delta - availableScroll + gap);
-  }
-
-  const nextMaxTop = Math.max(window.scrollY, (document.scrollingElement?.scrollHeight ?? 0) - window.innerHeight);
-  const nextTop = Math.min(nextMaxTop, window.scrollY + delta);
-
-  if (nextTop <= window.scrollY) {
-    return false;
-  }
-
-  window.scrollTo({
-    left: window.scrollX,
-    top: nextTop,
-    behavior: "auto"
-  });
-  return true;
 }
 
 function parseAmount(value: string): number | null {
@@ -428,256 +312,6 @@ function UploadProgress({ state }: { state: UploadProgressState | null }) {
   );
 }
 
-function OptionPicker({
-  options,
-  value,
-  onChange,
-  placeholder,
-  allowClear = true
-}: {
-  options: PickerOption[];
-  value: string;
-  onChange: (next: string) => void;
-  placeholder: string;
-  allowClear?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [menuActive, setMenuActive] = useState(false);
-  const [menuStyle, setMenuStyle] = useState<{
-    left: number;
-    top: number;
-    width: number;
-    maxHeight: number;
-  } | null>(null);
-  const reduceMotion = Boolean(useReducedMotion());
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const scrollSnapshotRef = useRef<PickerScrollSnapshot | null>(null);
-  const menuTransition = reduceMotion
-    ? { duration: 0 }
-    : { type: "spring" as const, stiffness: 420, damping: 36, mass: 0.76 };
-  const selectedOption = options.find((option) => option.value === value);
-  const menuVariants = {
-    open: reduceMotion ? { opacity: 1 } : {
-      opacity: 1,
-      y: 0,
-      transition: {
-        y: menuTransition
-      }
-    },
-    closed: reduceMotion ? { opacity: 0 } : {
-      opacity: 0,
-      y: -10,
-      transition: {
-        duration: 0.18,
-        ease: motionEase
-      }
-    }
-  };
-  const optionVariants = {
-    open: reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 },
-    closed: reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6 }
-  };
-  const menuTargetHeight = Math.min(260, Math.max(1, options.length + (allowClear ? 1 : 0)) * 42 + 20);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const updateMenuPosition = () => {
-      if (!triggerRef.current) {
-        return;
-      }
-
-      const triggerRect = triggerRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const gutter = 12;
-      const gap = 8;
-      const width = Math.min(triggerRect.width, viewportWidth - gutter * 2);
-      const left = Math.max(gutter, Math.min(triggerRect.left, viewportWidth - gutter - width));
-      const availableBelow = Math.max(0, viewportHeight - triggerRect.bottom - gutter - gap);
-
-      setMenuStyle({
-        left,
-        top: triggerRect.bottom + gap,
-        width,
-        maxHeight: Math.min(menuTargetHeight, Math.max(96, availableBelow))
-      });
-    };
-
-    const maybeShiftViewport = () => {
-      if (!triggerRef.current) {
-        return false;
-      }
-
-      return shiftPickerViewportForMenu(
-        scrollSnapshotRef.current,
-        triggerRef.current.getBoundingClientRect(),
-        menuTargetHeight
-      );
-    };
-
-    const focusTrigger = () => {
-      try {
-        triggerRef.current?.focus({ preventScroll: true });
-      } catch {
-        triggerRef.current?.focus();
-      }
-    };
-
-    let nestedAnimationFrame = 0;
-    const animationFrame = window.requestAnimationFrame(() => {
-      updateMenuPosition();
-      maybeShiftViewport();
-      nestedAnimationFrame = window.requestAnimationFrame(() => {
-        updateMenuPosition();
-        focusTrigger();
-      });
-    });
-    window.addEventListener("resize", updateMenuPosition);
-    window.addEventListener("scroll", updateMenuPosition, true);
-
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-      window.cancelAnimationFrame(nestedAnimationFrame);
-      window.removeEventListener("resize", updateMenuPosition);
-      window.removeEventListener("scroll", updateMenuPosition, true);
-    };
-  }, [allowClear, menuTargetHeight, open, options.length]);
-
-  useEffect(() => {
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!(event.target instanceof Node)) return;
-      if (!rootRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) {
-        setOpen(false);
-      }
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-
-    window.addEventListener("mousedown", handlePointerDown);
-    window.addEventListener("keydown", handleEscape);
-    return () => {
-      window.removeEventListener("mousedown", handlePointerDown);
-      window.removeEventListener("keydown", handleEscape);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (open) {
-      setMenuActive(true);
-    }
-  }, [open]);
-
-  const closeMenu = () => {
-    setOpen(false);
-  };
-
-  return (
-    <div className={`account-picker ${menuActive ? "account-picker--open" : ""}`} ref={rootRef}>
-      <button
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        className={`account-picker__trigger ${value ? "" : "account-picker__trigger--placeholder"}`}
-        onClick={() => {
-          if (open) {
-            closeMenu();
-            return;
-          }
-          scrollSnapshotRef.current = capturePickerScrollSnapshot(triggerRef.current);
-          setMenuActive(true);
-          setOpen(true);
-        }}
-        ref={triggerRef}
-        type="button"
-      >
-        <span>{selectedOption?.label || value || placeholder}</span>
-        <motion.svg
-          animate={{ rotate: open ? 180 : 0, y: open ? 1 : 0 }}
-          fill="none"
-          height="14"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="1.8"
-          transition={menuTransition}
-          viewBox="0 0 24 24"
-          width="14"
-        >
-          <path d="m6 9 6 6 6-6" />
-        </motion.svg>
-      </button>
-
-      <AnimatePresence initial={false}>
-        {open && menuStyle ? createPortal(
-          <motion.div
-            animate="open"
-            className="account-picker__menu account-picker__menu--floating"
-            exit="closed"
-            initial="closed"
-            onAnimationComplete={(definition) => {
-              if (definition === "closed") {
-                restorePickerScrollSpace(scrollSnapshotRef.current);
-                scrollSnapshotRef.current = null;
-                setMenuActive(false);
-                setMenuStyle(null);
-              }
-            }}
-            ref={menuRef}
-            role="listbox"
-            style={menuStyle}
-            variants={menuVariants}
-          >
-            {allowClear ? (
-              <motion.button
-                aria-selected={!value}
-                className={`account-picker__option ${!value ? "account-picker__option--active" : ""}`}
-                onClick={() => { onChange(""); closeMenu(); }}
-                role="option"
-                type="button"
-                variants={optionVariants}
-              >
-                Clear selection
-              </motion.button>
-            ) : null}
-
-            {options.length ? (
-              options.map((option) => (
-                <motion.button
-                  aria-selected={value === option.value}
-                  className={`account-picker__option ${value === option.value ? "account-picker__option--active" : ""}`}
-                  key={option.value}
-                  onClick={() => { onChange(option.value); closeMenu(); }}
-                  role="option"
-                  type="button"
-                  variants={optionVariants}
-                >
-                  {option.label}
-                </motion.button>
-              ))
-            ) : (
-              <motion.button
-                className="account-picker__option"
-                disabled
-                type="button"
-                variants={optionVariants}
-              >
-                No options available
-              </motion.button>
-            )}
-          </motion.div>,
-          document.body
-        ) : null}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 export function AdminPage({ user, section }: AdminPageProps) {
   const reduceMotion = useReducedMotion();
   const meta = ADMIN_SECTION_META[section];
@@ -749,11 +383,7 @@ export function AdminPage({ user, section }: AdminPageProps) {
   const questions = questionsResponse?.questions ?? [];
   const students = studentsResponse?.students ?? [];
   const admins = adminsResponse?.admins ?? [];
-  const levelOptions = useMemo<PickerOption[]>(
-    () => LEVELS.map((level) => ({ value: level, label: titleCase(level) })),
-    []
-  );
-  const particularOptions = useMemo<PickerOption[]>(() => {
+  const particularOptions = useMemo<string[]>(() => {
     const seen = new Set<string>();
     return [...newQuestion.options.split(/\r?\n|,/), ...newQuestion.answerRows.map((row) => row.account)]
       .map((value) => value.trim())
@@ -766,8 +396,7 @@ export function AdminPage({ user, section }: AdminPageProps) {
 
         seen.add(key);
         return true;
-      })
-      .map((value) => ({ value, label: value }));
+      });
   }, [newQuestion.answerRows, newQuestion.options]);
   const selectableAdminIds = admins.filter((adminItem) => adminItem.id !== user.id).map((adminItem) => adminItem.id);
   const totalStudents = dashboard?.studentsCount ?? studentsResponse?.pagination.totalItems ?? 0;
@@ -1674,13 +1303,17 @@ export function AdminPage({ user, section }: AdminPageProps) {
               <div className="question-workbench__editor-grid">
                 <label className="form-field">
                   <span className="form-label">Level</span>
-                  <OptionPicker
-                    allowClear={false}
-                    onChange={(next) => setNewQuestion((current) => ({ ...current, level: next as Level }))}
-                    options={levelOptions}
-                    placeholder="Select level"
+                  <select
+                    className="input"
+                    onChange={(event) => setNewQuestion((current) => ({ ...current, level: event.target.value as Level }))}
                     value={newQuestion.level}
-                  />
+                  >
+                    {LEVELS.map((level) => (
+                      <option key={level} value={level}>
+                        {titleCase(level)}
+                      </option>
+                    ))}
+                  </select>
                 </label>
 
                 <label className="form-field">
@@ -1721,12 +1354,18 @@ export function AdminPage({ user, section }: AdminPageProps) {
                         <tr key={`draft-row-${index}`}>
                           <td style={{ fontFamily: "var(--font-mono)" }}>{index + 1}</td>
                           <td>
-                            <OptionPicker
-                              onChange={(next) => updateDraftRow(index, "account", next)}
-                              options={particularOptions}
-                              placeholder="Select particular"
+                            <select
+                              className="input"
+                              onChange={(event) => updateDraftRow(index, "account", event.target.value)}
                               value={row.account}
-                            />
+                            >
+                              <option value="">
+                                {particularOptions.length ? "Select particular" : "Add particulars above first"}
+                              </option>
+                              {particularOptions.map((option) => (
+                                <option key={option} value={option}>{option}</option>
+                              ))}
+                            </select>
                           </td>
                           <td><input className="input" inputMode="decimal" onChange={(event) => updateDraftRow(index, "debit", event.target.value)} placeholder="0.00" value={row.debit} /></td>
                           <td><input className="input" inputMode="decimal" onChange={(event) => updateDraftRow(index, "credit", event.target.value)} placeholder="0.00" value={row.credit} /></td>
@@ -1751,12 +1390,18 @@ export function AdminPage({ user, section }: AdminPageProps) {
                         <div className="question-workbench__answer-card-grid">
                           <label className="form-field">
                             <span className="form-label">Account</span>
-                            <OptionPicker
-                              onChange={(next) => updateDraftRow(index, "account", next)}
-                              options={particularOptions}
-                              placeholder="Select particular"
+                            <select
+                              className="input"
+                              onChange={(event) => updateDraftRow(index, "account", event.target.value)}
                               value={row.account}
-                            />
+                            >
+                              <option value="">
+                                {particularOptions.length ? "Select particular" : "Add particulars above first"}
+                              </option>
+                              {particularOptions.map((option) => (
+                                <option key={option} value={option}>{option}</option>
+                              ))}
+                            </select>
                           </label>
 
                           <label className="form-field">

@@ -92,6 +92,7 @@ interface GoogleSignInButtonProps {
   disabled?: boolean;
   onCredential: (credential: string) => void;
   text?: "signin_with" | "signup_with" | "continue_with" | "signin";
+  role?: "student" | "admin";
 }
 
 function getGoogleButtonLabel(text: GoogleSignInButtonProps["text"]): string {
@@ -112,7 +113,8 @@ export function GoogleSignInButton({
   clientId,
   disabled = false,
   onCredential,
-  text = "signin_with"
+  text = "signin_with",
+  role = "student"
 }: GoogleSignInButtonProps) {
   const buttonRef = useRef<HTMLDivElement | null>(null);
   const onCredentialRef = useRef(onCredential);
@@ -147,16 +149,37 @@ export function GoogleSignInButton({
         const container = buttonRef.current;
         container.replaceChildren();
 
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: (response) => {
-            if (disabledRef.current || !response.credential) {
-              return;
-            }
+        // Use redirect mode in production, popup mode for localhost
+        const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+        const callbackUrl = `${window.location.origin}/api/auth/google/callback`;
 
-            onCredentialRef.current(response.credential);
-          }
-        });
+        if (isLocalhost) {
+          // Popup mode works fine on localhost
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: (response) => {
+              if (disabledRef.current || !response.credential) {
+                return;
+              }
+
+              onCredentialRef.current(response.credential);
+            }
+          });
+        } else {
+          // Redirect mode avoids origin check issues on production
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            ux_mode: "redirect",
+            login_uri: `${callbackUrl}?role=${role}`,
+            callback: (response) => {
+              if (disabledRef.current || !response.credential) {
+                return;
+              }
+
+              onCredentialRef.current(response.credential);
+            }
+          });
+        }
 
         window.google.accounts.id.renderButton(container, {
           type: "standard",

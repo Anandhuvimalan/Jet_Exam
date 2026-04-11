@@ -231,6 +231,7 @@ export function AuthPage({ applyAuthStatus, authStatus, refreshAuth, view }: Aut
                 void submitGoogleLogin({ credential, role });
               }}
               text="continue_with"
+              role={role}
             />
 
             {!googleClientId ? (

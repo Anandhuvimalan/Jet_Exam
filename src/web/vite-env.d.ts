@@ -16,6 +16,8 @@ interface GoogleAccountsIdApi {
   initialize(options: {
     client_id: string;
     callback: (response: GoogleCredentialResponse) => void;
+    ux_mode?: "popup" | "redirect";
+    login_uri?: string;
   }): void;
   renderButton(
     parent: HTMLElement,

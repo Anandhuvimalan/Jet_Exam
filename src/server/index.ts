@@ -8,6 +8,7 @@ import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
+import formbody from "@fastify/formbody";
 import {
   LEVELS,
   type AdminAssistantMessage,
@@ -123,6 +124,7 @@ async function buildServer(config: ServerRuntimeConfig) {
       fileSize: 10 * 1024 * 1024
     }
   });
+  await app.register(formbody);
 
   // Request timing and structured logging
   app.addHook("onRequest", async (request) => {
@@ -337,6 +339,46 @@ async function buildServer(config: ServerRuntimeConfig) {
     } catch (error) {
       reply.code(400);
       return { message: getErrorMessage(error) };
+    }
+  });
+
+  // Google Identity Services redirect callback
+  // When ux_mode is "redirect", Google POSTs the credential here as form-urlencoded
+  app.post("/api/auth/google/callback", async (request, reply) => {
+    if (!config.googleClientId) {
+      reply.code(503);
+      return reply.send({ message: "Google sign-in is not configured." });
+    }
+
+    // Parse the credential from the form-encoded body
+    // Google sends: credential=<JWT>&g_csrf_token=<token>
+    const body = request.body as Record<string, string> | undefined;
+    const credential = typeof body === "object" && body !== null
+      ? (body.credential ?? "")
+      : "";
+
+    if (!credential) {
+      reply.code(400);
+      return reply.send({ message: "Google credential is missing." });
+    }
+
+    // Determine the role from the query parameter
+    const query = request.query as Record<string, string> | undefined;
+    const roleParam = typeof query === "object" && query !== null ? (query.role ?? "") : "";
+    const role: "admin" | "student" = roleParam === "admin" ? "admin" : "student";
+    const redirectPath = role === "admin" ? "/admin/dashboard" : "/student/dashboard";
+    const loginPath = role === "admin" ? "/admin/login" : "/student/login";
+
+    try {
+      const identity = await verifyGoogleCredential(credential, config.googleClientId);
+      const result = role === "admin"
+        ? await platformStore.loginAdminWithGoogle(identity.name, identity.email, config.superAdminEmail)
+        : await platformStore.loginStudentWithGoogle(identity.email);
+
+      reply.header("Set-Cookie", buildSessionCookie(result.token));
+      reply.redirect(redirectPath);
+    } catch (error) {
+      reply.redirect(`${loginPath}?error=${encodeURIComponent(getErrorMessage(error))}`);
     }
   });
 

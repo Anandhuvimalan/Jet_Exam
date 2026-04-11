@@ -33,12 +33,30 @@ function parseEnvValue(value: string): string {
   return trimmed;
 }
 
+function getRawEnvValue(key: string): string | undefined {
+  const value = process.env[key];
+  return value === undefined ? undefined : parseEnvValue(value);
+}
+
+export function normalizeOrigin(origin: string): string {
+  const normalized = parseEnvValue(origin).trim();
+  if (!normalized) {
+    return "";
+  }
+
+  try {
+    return new URL(normalized).origin;
+  } catch {
+    return normalized.replace(/\/+$/, "");
+  }
+}
+
 function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined) {
     return fallback;
   }
 
-  const normalized = value.trim().toLowerCase();
+  const normalized = parseEnvValue(value).trim().toLowerCase();
   if (["1", "true", "yes", "on"].includes(normalized)) {
     return true;
   }
@@ -51,7 +69,7 @@ function parseBoolean(value: string | undefined, fallback: boolean): boolean {
 }
 
 function parsePositiveInteger(value: string | undefined, fallback: number, minimum = 1): number {
-  const parsed = Number(value);
+  const parsed = Number(value === undefined ? value : parseEnvValue(value));
   if (!Number.isInteger(parsed) || parsed < minimum) {
     return fallback;
   }
@@ -65,9 +83,9 @@ function parseOrigins(value: string | undefined): string[] {
   }
 
   return [...new Set(
-    value
+    parseEnvValue(value)
       .split(",")
-      .map((origin) => origin.trim())
+      .map((origin) => normalizeOrigin(origin))
       .filter(Boolean)
   )];
 }
@@ -108,42 +126,45 @@ export function getServerRuntimeConfig(rootDir = process.cwd()): ServerRuntimeCo
 
   loadProjectEnv(rootDir);
 
-  const nodeEnv = process.env.NODE_ENV === "production"
+  const nodeEnvValue = getRawEnvValue("NODE_ENV");
+  const nodeEnv = nodeEnvValue === "production"
     ? "production"
-    : process.env.NODE_ENV === "test"
+    : nodeEnvValue === "test"
       ? "test"
       : "development";
   const isProduction = nodeEnv === "production";
-  const appOrigin = process.env.APP_ORIGIN?.trim() || null;
-  const corsOrigins = parseOrigins(process.env.CORS_ORIGINS ?? appOrigin ?? undefined);
+  const appOrigin = getRawEnvValue("APP_ORIGIN")
+    ? normalizeOrigin(getRawEnvValue("APP_ORIGIN")!)
+    : null;
+  const corsOrigins = parseOrigins(getRawEnvValue("CORS_ORIGINS") ?? appOrigin ?? undefined);
   const logLevel = (() => {
-    const value = process.env.LOG_LEVEL?.trim().toLowerCase();
+    const value = getRawEnvValue("LOG_LEVEL")?.trim().toLowerCase();
     if (value === "debug" || value === "info" || value === "warn" || value === "error") {
       return value;
     }
 
     return "info";
   })();
-  const sessionCookieSameSite = process.env.COOKIE_SAMESITE?.trim().toLowerCase() === "lax" ? "Lax" : "Strict";
+  const sessionCookieSameSite = getRawEnvValue("COOKIE_SAMESITE")?.trim().toLowerCase() === "lax" ? "Lax" : "Strict";
 
   cachedConfig = {
     nodeEnv,
     isProduction,
-    host: process.env.HOST?.trim() || "0.0.0.0",
-    port: parsePositiveInteger(process.env.PORT, 3001),
-    trustProxy: parseBoolean(process.env.TRUST_PROXY, isProduction),
+    host: getRawEnvValue("HOST")?.trim() || "0.0.0.0",
+    port: parsePositiveInteger(getRawEnvValue("PORT"), 3001),
+    trustProxy: parseBoolean(getRawEnvValue("TRUST_PROXY"), isProduction),
     appOrigin,
     corsOrigins,
     logLevel,
-    bodyLimitBytes: parsePositiveInteger(process.env.BODY_LIMIT_MB, 12) * 1024 * 1024,
-    rateLimitMax: parsePositiveInteger(process.env.RATE_LIMIT_MAX, 1200),
-    rateLimitWindowMs: parsePositiveInteger(process.env.RATE_LIMIT_WINDOW_MS, 60_000, 5_000),
-    authRateLimitMax: parsePositiveInteger(process.env.AUTH_RATE_LIMIT_MAX, 300),
-    sessionCookieSecure: parseBoolean(process.env.COOKIE_SECURE, isProduction),
+    bodyLimitBytes: parsePositiveInteger(getRawEnvValue("BODY_LIMIT_MB"), 12) * 1024 * 1024,
+    rateLimitMax: parsePositiveInteger(getRawEnvValue("RATE_LIMIT_MAX"), 1200),
+    rateLimitWindowMs: parsePositiveInteger(getRawEnvValue("RATE_LIMIT_WINDOW_MS"), 60_000, 5_000),
+    authRateLimitMax: parsePositiveInteger(getRawEnvValue("AUTH_RATE_LIMIT_MAX"), 300),
+    sessionCookieSecure: parseBoolean(getRawEnvValue("COOKIE_SECURE"), isProduction),
     sessionCookieSameSite,
-    databaseUrl: process.env.DATABASE_URL?.trim() || null,
-    googleClientId: process.env.GOOGLE_CLIENT_ID?.trim() || null,
-    superAdminEmail: process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase() || "anandhu7833@gmail.com"
+    databaseUrl: getRawEnvValue("DATABASE_URL")?.trim() || null,
+    googleClientId: getRawEnvValue("GOOGLE_CLIENT_ID")?.trim() || null,
+    superAdminEmail: getRawEnvValue("SUPER_ADMIN_EMAIL")?.trim().toLowerCase() || "anandhu7833@gmail.com"
   };
 
   return cachedConfig;

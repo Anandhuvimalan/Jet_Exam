@@ -24,7 +24,7 @@ import { parseWorkbookFromBuffer } from "./import/workbook";
 import { generateAdminAssistantReply } from "./services/admin-assistant";
 import { dashboardCache, questionCache, getAllCacheMetrics } from "./services/cache";
 import { quizSubmitSemaphore, quizSubmitQueue, dbCircuitBreaker } from "./services/concurrency";
-import { getServerRuntimeConfig, type ServerRuntimeConfig } from "./services/env";
+import { getServerRuntimeConfig, normalizeOrigin, type ServerRuntimeConfig } from "./services/env";
 import { evaluateSubmissions } from "./services/evaluator";
 import { verifyGoogleCredential } from "./services/google-auth";
 import { getPerformanceSnapshot, getSlowQueries, logRequestMetrics, markServerStarted } from "./services/logger";
@@ -114,7 +114,8 @@ async function buildServer(config: ServerRuntimeConfig) {
   await app.register(cors, {
     credentials: true,
     origin(origin, callback) {
-      if (!origin || config.corsOrigins.length === 0 || config.corsOrigins.includes(origin)) {
+      const normalizedOrigin = origin ? normalizeOrigin(origin) : origin;
+      if (!normalizedOrigin || config.corsOrigins.length === 0 || config.corsOrigins.includes(normalizedOrigin)) {
         callback(null, true);
         return;
       }
@@ -165,7 +166,8 @@ async function buildServer(config: ServerRuntimeConfig) {
       request.method !== "OPTIONS"
     ) {
       const origin = request.headers.origin;
-      if (origin && config.corsOrigins.length > 0 && !config.corsOrigins.includes(origin)) {
+      const normalizedOrigin = origin ? normalizeOrigin(origin) : origin;
+      if (normalizedOrigin && config.corsOrigins.length > 0 && !config.corsOrigins.includes(normalizedOrigin)) {
         reply.code(403);
         void reply.send({ message: "Origin not allowed." });
         return;

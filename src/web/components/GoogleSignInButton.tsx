@@ -172,7 +172,7 @@ export function GoogleSignInButton({
           window.google.accounts.id.initialize({
             client_id: clientId,
             ux_mode: "redirect",
-            login_uri: `${window.location.origin}/api/auth/google/callback`,
+            login_uri: window.location.origin,
             callback: (response) => {
               if (disabledRef.current || !response.credential) {
                 return;

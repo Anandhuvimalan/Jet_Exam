@@ -342,9 +342,10 @@ async function buildServer(config: ServerRuntimeConfig) {
     }
   });
 
-  // Google Identity Services redirect callback
+  // Google Identity Services redirect callback at root URL
   // When ux_mode is "redirect", Google POSTs the credential here as form-urlencoded
-  app.post("/api/auth/google/callback", async (request, reply) => {
+  // GET / still serves the frontend (handled by static plugin), POST / handles auth
+  app.post("/", async (request, reply) => {
     if (!config.googleClientId) {
       reply.code(503);
       return reply.send({ message: "Google sign-in is not configured." });

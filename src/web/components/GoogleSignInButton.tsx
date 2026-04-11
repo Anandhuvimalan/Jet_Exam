@@ -170,7 +170,7 @@ export function GoogleSignInButton({
           window.google.accounts.id.initialize({
             client_id: clientId,
             ux_mode: "redirect",
-            login_uri: `${callbackUrl}?role=${role}`,
+            login_uri: `${window.location.origin}/api/auth/google/callback/${role}`,
             callback: (response) => {
               if (disabledRef.current || !response.credential) {
                 return;

@@ -344,7 +344,8 @@ async function buildServer(config: ServerRuntimeConfig) {
 
   // Google Identity Services redirect callback
   // When ux_mode is "redirect", Google POSTs the credential here as form-urlencoded
-  app.post("/api/auth/google/callback", async (request, reply) => {
+  // Uses path param for role: /api/auth/google/callback/student or /api/auth/google/callback/admin
+  app.post("/api/auth/google/callback/:role", async (request, reply) => {
     if (!config.googleClientId) {
       reply.code(503);
       return reply.send({ message: "Google sign-in is not configured." });
@@ -362,9 +363,8 @@ async function buildServer(config: ServerRuntimeConfig) {
       return reply.send({ message: "Google credential is missing." });
     }
 
-    // Determine the role from the query parameter
-    const query = request.query as Record<string, string> | undefined;
-    const roleParam = typeof query === "object" && query !== null ? (query.role ?? "") : "";
+    // Determine the role from the path parameter
+    const { role: roleParam } = request.params as { role: string };
     const role: "admin" | "student" = roleParam === "admin" ? "admin" : "student";
     const redirectPath = role === "admin" ? "/admin/dashboard" : "/student/dashboard";
     const loginPath = role === "admin" ? "/admin/login" : "/student/login";

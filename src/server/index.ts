@@ -344,8 +344,7 @@ async function buildServer(config: ServerRuntimeConfig) {
 
   // Google Identity Services redirect callback
   // When ux_mode is "redirect", Google POSTs the credential here as form-urlencoded
-  // Uses path param for role: /api/auth/google/callback/student or /api/auth/google/callback/admin
-  app.post("/api/auth/google/callback/:role", async (request, reply) => {
+  app.post("/api/auth/google/callback", async (request, reply) => {
     if (!config.googleClientId) {
       reply.code(503);
       return reply.send({ message: "Google sign-in is not configured." });
@@ -363,8 +362,9 @@ async function buildServer(config: ServerRuntimeConfig) {
       return reply.send({ message: "Google credential is missing." });
     }
 
-    // Determine the role from the path parameter
-    const { role: roleParam } = request.params as { role: string };
+    // Determine the role from the jet_auth_intent cookie set by the frontend
+    const cookies = parseCookies(request.headers.cookie);
+    const roleParam = cookies.jet_auth_intent ?? "";
     const role: "admin" | "student" = roleParam === "admin" ? "admin" : "student";
     const redirectPath = role === "admin" ? "/admin/dashboard" : "/student/dashboard";
     const loginPath = role === "admin" ? "/admin/login" : "/student/login";

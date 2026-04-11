@@ -167,10 +167,12 @@ export function GoogleSignInButton({
           });
         } else {
           // Redirect mode avoids origin check issues on production
+          // Set a cookie so the server knows the intended role
+          document.cookie = `jet_auth_intent=${role};path=/;max-age=300;SameSite=Lax`;
           window.google.accounts.id.initialize({
             client_id: clientId,
             ux_mode: "redirect",
-            login_uri: `${window.location.origin}/api/auth/google/callback/${role}`,
+            login_uri: `${window.location.origin}/api/auth/google/callback`,
             callback: (response) => {
               if (disabledRef.current || !response.credential) {
                 return;

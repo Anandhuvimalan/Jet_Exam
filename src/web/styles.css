@@ -7362,10 +7362,26 @@ input[type="checkbox"] {
     min-height: auto;
   }
 
+  .shell--public-auth {
+    height: auto;
+    min-height: 100svh;
+    min-height: 100dvh;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    overflow-y: visible;
+  }
+
   .auth-frame {
     height: auto;
     gap: 0;
     padding: clamp(10px, 1.4vw, 16px);
+    overflow: visible;
+  }
+
+  .page--public-auth,
+  .page-route--public-auth,
+  .page-route--public-auth > * {
+    height: auto;
+    min-height: 0;
     overflow: visible;
   }
 
@@ -7949,6 +7965,14 @@ input[type="checkbox"] {
     padding-inline: var(--shell-inline-padding);
   }
 
+  .shell--public-auth {
+    padding-inline: 12px;
+  }
+
+  .shell--public-auth .auth-frame {
+    padding: 12px;
+  }
+
   .pagination-bar__controls {
     width: 100%;
     flex-direction: column;
@@ -8091,6 +8115,14 @@ input[type="checkbox"] {
   .shell {
     --shell-inline-padding: 4px;
     padding-inline: var(--shell-inline-padding);
+  }
+
+  .shell--public-auth {
+    padding-inline: 10px;
+  }
+
+  .shell--public-auth .auth-frame {
+    padding: 10px;
   }
 
   .topbar {

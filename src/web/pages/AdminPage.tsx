@@ -88,6 +88,7 @@ interface AdminConfirmState {
 
 const motionEase = [0.22, 1, 0.36, 1] as const;
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+const LEVEL_SELECT_OPTIONS = LEVELS.map((level) => ({ label: titleCase(level), value: level }));
 const ADMIN_SECTION_META: Record<AdminSection, { label: string; eyebrow: string; title: string; copy: string }> = {
   overview: {
     label: "Overview",
@@ -398,6 +399,10 @@ export function AdminPage({ user, section }: AdminPageProps) {
         return true;
       });
   }, [newQuestion.answerRows, newQuestion.options]);
+  const particularSelectOptions = useMemo(
+    () => particularOptions.map((option) => ({ label: option, value: option })),
+    [particularOptions]
+  );
   const selectableAdminIds = admins.filter((adminItem) => adminItem.id !== user.id).map((adminItem) => adminItem.id);
   const totalStudents = dashboard?.studentsCount ?? studentsResponse?.pagination.totalItems ?? 0;
   const totalQuestions = dashboard?.questionSummary.totalQuestions ?? 0;
@@ -1303,17 +1308,13 @@ export function AdminPage({ user, section }: AdminPageProps) {
               <div className="question-workbench__editor-grid">
                 <label className="form-field">
                   <span className="form-label">Level</span>
-                  <select
-                    className="input"
-                    onChange={(event) => setNewQuestion((current) => ({ ...current, level: event.target.value as Level }))}
+                  <SurfaceSelect
+                    ariaLabel="Question level"
+                    onChange={(next) => setNewQuestion((current) => ({ ...current, level: next as Level }))}
+                    options={LEVEL_SELECT_OPTIONS}
+                    placeholder="Level"
                     value={newQuestion.level}
-                  >
-                    {LEVELS.map((level) => (
-                      <option key={level} value={level}>
-                        {titleCase(level)}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </label>
 
                 <label className="form-field">
@@ -1354,18 +1355,16 @@ export function AdminPage({ user, section }: AdminPageProps) {
                         <tr key={`draft-row-${index}`}>
                           <td style={{ fontFamily: "var(--font-mono)" }}>{index + 1}</td>
                           <td>
-                            <select
-                              className="input"
-                              onChange={(event) => updateDraftRow(index, "account", event.target.value)}
+                            <SurfaceSelect
+                              allowClear
+                              ariaLabel={`Answer row ${index + 1} account`}
+                              clearLabel="Clear particular"
+                              emptyLabel="Add particulars above first"
+                              onChange={(next) => updateDraftRow(index, "account", next)}
+                              options={particularSelectOptions}
+                              placeholder={particularOptions.length ? "Select particular" : "Add particulars above first"}
                               value={row.account}
-                            >
-                              <option value="">
-                                {particularOptions.length ? "Select particular" : "Add particulars above first"}
-                              </option>
-                              {particularOptions.map((option) => (
-                                <option key={option} value={option}>{option}</option>
-                              ))}
-                            </select>
+                            />
                           </td>
                           <td><input className="input" inputMode="decimal" onChange={(event) => updateDraftRow(index, "debit", event.target.value)} placeholder="0.00" value={row.debit} /></td>
                           <td><input className="input" inputMode="decimal" onChange={(event) => updateDraftRow(index, "credit", event.target.value)} placeholder="0.00" value={row.credit} /></td>
@@ -1390,18 +1389,16 @@ export function AdminPage({ user, section }: AdminPageProps) {
                         <div className="question-workbench__answer-card-grid">
                           <label className="form-field">
                             <span className="form-label">Account</span>
-                            <select
-                              className="input"
-                              onChange={(event) => updateDraftRow(index, "account", event.target.value)}
+                            <SurfaceSelect
+                              allowClear
+                              ariaLabel={`Mobile answer row ${index + 1} account`}
+                              clearLabel="Clear particular"
+                              emptyLabel="Add particulars above first"
+                              onChange={(next) => updateDraftRow(index, "account", next)}
+                              options={particularSelectOptions}
+                              placeholder={particularOptions.length ? "Select particular" : "Add particulars above first"}
                               value={row.account}
-                            >
-                              <option value="">
-                                {particularOptions.length ? "Select particular" : "Add particulars above first"}
-                              </option>
-                              {particularOptions.map((option) => (
-                                <option key={option} value={option}>{option}</option>
-                              ))}
-                            </select>
+                            />
                           </label>
 
                           <label className="form-field">

@@ -13,6 +13,14 @@ import type {
 } from "../../shared/types";
 import { LEVELS } from "../../shared/types";
 import { fetchStudentAttempt, fetchStudentDashboard, getCachedStudentDashboard, startStudentQuiz, submitStudentQuiz } from "../api";
+import {
+  capturePickerScrollSnapshot,
+  getFloatingPickerStyle,
+  restorePickerScrollSpace,
+  shiftPickerViewportForMenu,
+  type FloatingPickerStyle,
+  type PickerScrollSnapshot
+} from "../components/floatingPicker";
 import { MobileMetaRow } from "../components/MobileMetaRow";
 import { SurfaceSelect } from "../components/SurfaceSelect";
 
@@ -44,12 +52,6 @@ const motionEase = [0.22, 1, 0.36, 1] as const;
 const STUDENT_RESULTS_PAGE_SIZES = [5, 10, 20];
 const STUDENT_RESULTS_PAGE_SIZE_OPTIONS = STUDENT_RESULTS_PAGE_SIZES.map((size) => ({ label: String(size), value: String(size) }));
 
-interface PickerScrollSnapshot {
-  container: HTMLElement | null;
-  spacerTarget: HTMLElement;
-  spacerPaddingBottom: string;
-}
-
 function tc(s: string) { return s.charAt(0).toUpperCase() + s.slice(1); }
 function emptyRows(n: number): StudentAnswerRow[] { return Array.from({ length: n }, () => ({ account: "", debit: "", credit: "" })); }
 function hasAnswer(rows: StudentAnswerRow[]) { return rows.some((r) => r.account || r.debit || r.credit); }
@@ -73,110 +75,6 @@ function toAttemptSummary(attempt: AttemptDetail): AttemptSummary {
 
 function wasAttempted(result: QuestionResult) {
   return result.studentRows.some((r) => r.account || r.debit !== null || r.credit !== null);
-}
-
-function findScrollableAncestor(node: HTMLElement | null) {
-  let current = node?.parentElement ?? null;
-
-  while (current) {
-    const style = window.getComputedStyle(current);
-    const overflowY = style.overflowY === "visible" ? style.overflow : style.overflowY;
-    const scrollable = /(auto|scroll|overlay)/.test(overflowY)
-      && current.scrollHeight > current.clientHeight;
-
-    if (scrollable) {
-      return current;
-    }
-
-    current = current.parentElement;
-  }
-
-  return null;
-}
-
-function capturePickerScrollSnapshot(node: HTMLElement | null): PickerScrollSnapshot {
-  const container = findScrollableAncestor(node);
-  const spacerTarget = container ?? document.body;
-
-  return {
-    container,
-    spacerTarget,
-    spacerPaddingBottom: spacerTarget.style.paddingBottom
-  };
-}
-
-function ensurePickerScrollSpace(snapshot: PickerScrollSnapshot | null, requiredSpace: number) {
-  if (!snapshot || requiredSpace <= 0) {
-    return;
-  }
-
-  const currentPaddingBottom = Number.parseFloat(window.getComputedStyle(snapshot.spacerTarget).paddingBottom) || 0;
-  snapshot.spacerTarget.style.paddingBottom = `${Math.ceil(currentPaddingBottom + requiredSpace)}px`;
-}
-
-function restorePickerScrollSpace(snapshot: PickerScrollSnapshot | null) {
-  if (!snapshot) {
-    return;
-  }
-
-  snapshot.spacerTarget.style.paddingBottom = snapshot.spacerPaddingBottom;
-}
-
-function shiftPickerViewportForMenu(snapshot: PickerScrollSnapshot | null, triggerRect: DOMRect, menuHeight: number) {
-  const gutter = 12;
-  const gap = 8;
-  const availableBelow = Math.max(0, window.innerHeight - triggerRect.bottom - gutter - gap);
-  const overflow = Math.ceil(menuHeight - availableBelow);
-
-  if (overflow <= 0) {
-    return false;
-  }
-
-  const delta = overflow + gap;
-
-  if (snapshot?.container) {
-    const availableScroll = Math.max(0, snapshot.container.scrollHeight - snapshot.container.clientHeight - snapshot.container.scrollTop);
-    if (availableScroll < delta) {
-      ensurePickerScrollSpace(snapshot, delta - availableScroll + gap);
-    }
-
-    const nextTop = Math.min(
-      snapshot.container.scrollHeight - snapshot.container.clientHeight,
-      snapshot.container.scrollTop + delta
-    );
-
-    if (nextTop <= snapshot.container.scrollTop) {
-      return false;
-    }
-
-    snapshot.container.scrollTo({
-      left: snapshot.container.scrollLeft,
-      top: nextTop,
-      behavior: "auto"
-    });
-    return true;
-  }
-
-  const scrollingElement = document.scrollingElement;
-  const maxTop = scrollingElement ? scrollingElement.scrollHeight - window.innerHeight : window.scrollY;
-  const availableScroll = Math.max(0, maxTop - window.scrollY);
-  if (availableScroll < delta) {
-    ensurePickerScrollSpace(snapshot, delta - availableScroll + gap);
-  }
-
-  const nextMaxTop = Math.max(window.scrollY, (document.scrollingElement?.scrollHeight ?? 0) - window.innerHeight);
-  const nextTop = Math.min(nextMaxTop, window.scrollY + delta);
-
-  if (nextTop <= window.scrollY) {
-    return false;
-  }
-
-  window.scrollTo({
-    left: window.scrollX,
-    top: nextTop,
-    behavior: "auto"
-  });
-  return true;
 }
 
 function getReviewSize(result: QuestionResult) {
@@ -276,12 +174,7 @@ function AccountPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [menuMounted, setMenuMounted] = useState(false);
-  const [menuStyle, setMenuStyle] = useState<{
-    left: number;
-    top: number;
-    width: number;
-    maxHeight: number;
-  } | null>(null);
+  const [menuStyle, setMenuStyle] = useState<FloatingPickerStyle | null>(null);
   const reduceMotion = useReducedMotion();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -289,30 +182,34 @@ function AccountPicker({
   const scrollSnapshotRef = useRef<PickerScrollSnapshot | null>(null);
   const menuTransition = reduceMotion
     ? { duration: 0 }
-    : { type: "spring" as const, stiffness: 420, damping: 36, mass: 0.76 };
+    : { type: "spring" as const, stiffness: 320, damping: 30, mass: 0.9 };
   const closeEase = [0.4, 0, 1, 1] as const;
   const menuVariants = {
     open: reduceMotion ? { opacity: 1 } : {
       opacity: 1,
       y: 0,
+      scale: 1,
       transition: {
+        opacity: { duration: 0.2, ease: motionEase },
+        scale: { duration: 0.2, ease: motionEase },
         y: menuTransition
       }
     },
     closed: reduceMotion ? { opacity: 0 } : {
       opacity: 0,
       y: -8,
+      scale: 0.985,
       transition: {
-        duration: 0.14,
+        duration: 0.18,
         ease: closeEase
       }
     }
   };
   const optionVariants = {
-    open: reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, transition: { duration: 0.16, ease: motionEase } },
-    closed: reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, transition: { duration: 0.1, ease: closeEase } }
+    open: reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, transition: { duration: 0.2, ease: motionEase } },
+    closed: reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, transition: { duration: 0.14, ease: closeEase } }
   };
-  const menuTargetHeight = Math.min(260, (options.length + 1) * 42 + 20);
+  const menuTargetHeight = Math.max(56, (options.length + 1) * 42 + 20);
 
   useEffect(() => {
     if (open) {
@@ -330,23 +227,7 @@ function AccountPicker({
         return;
       }
 
-      const triggerRect = triggerRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const gutter = 12;
-      const gap = 8;
-      const width = Math.min(triggerRect.width, viewportWidth - gutter * 2);
-      const left = Math.max(gutter, Math.min(triggerRect.left, viewportWidth - gutter - width));
-      const availableBelow = Math.max(0, viewportHeight - triggerRect.bottom - gutter - gap);
-      const maxHeight = Math.min(menuTargetHeight, Math.max(96, availableBelow));
-      const top = triggerRect.bottom + gap;
-
-      setMenuStyle({
-        left,
-        top,
-        width,
-        maxHeight
-      });
+      setMenuStyle(getFloatingPickerStyle(triggerRef.current.getBoundingClientRect(), menuTargetHeight));
     };
 
     const maybeShiftViewport = () => {
@@ -357,7 +238,8 @@ function AccountPicker({
       return shiftPickerViewportForMenu(
         scrollSnapshotRef.current,
         triggerRef.current.getBoundingClientRect(),
-        menuTargetHeight
+        menuTargetHeight,
+        menuRef.current?.getBoundingClientRect()
       );
     };
 
@@ -369,25 +251,35 @@ function AccountPicker({
       }
     };
 
-    let nestedAnimationFrame = 0;
-    const animationFrame = window.requestAnimationFrame(() => {
+    const syncMenu = () => {
       updateMenuPosition();
       maybeShiftViewport();
+    };
+    const handleScroll = () => {
+      updateMenuPosition();
+    };
+    const handleResize = () => {
+      syncMenu();
+    };
+
+    let nestedAnimationFrame = 0;
+    const animationFrame = window.requestAnimationFrame(() => {
+      syncMenu();
       nestedAnimationFrame = window.requestAnimationFrame(() => {
-        updateMenuPosition();
+        syncMenu();
         focusTrigger();
       });
     });
-    window.addEventListener("resize", updateMenuPosition);
-    window.addEventListener("scroll", updateMenuPosition, true);
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("scroll", handleScroll, true);
 
     return () => {
       window.cancelAnimationFrame(animationFrame);
       window.cancelAnimationFrame(nestedAnimationFrame);
-      window.removeEventListener("resize", updateMenuPosition);
-      window.removeEventListener("scroll", updateMenuPosition, true);
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("scroll", handleScroll, true);
     };
-  }, [menuTargetHeight, open]);
+  }, [menuMounted, menuTargetHeight, open]);
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
@@ -463,7 +355,12 @@ function AccountPicker({
           }}
           ref={menuRef}
           role="listbox"
-          style={menuStyle}
+          style={{
+            left: menuStyle.left,
+            top: menuStyle.top,
+            width: menuStyle.width,
+            maxHeight: menuStyle.maxHeight
+          }}
           variants={menuVariants}
         >
           <motion.button
@@ -557,6 +454,7 @@ export function StudentPage() {
   const [attemptLoadingState, setAttemptLoadingState] = useState<{ id: string; review: boolean } | null>(null);
   const [error, setError] = useState("");
 
+  const pageRef = useRef<HTMLElement | null>(null);
   const reviewRef = useRef<HTMLElement | null>(null);
   const resultSheetRef = useRef<HTMLElement | null>(null);
 
@@ -678,6 +576,28 @@ export function StudentPage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [quizId, questions.length]);
+
+  useEffect(() => {
+    if (!quizId) {
+      return;
+    }
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      const shell = pageRef.current?.closest(".shell--workspace") as HTMLElement | null;
+      shell?.scrollTo({
+        left: shell.scrollLeft,
+        top: 0,
+        behavior: "auto"
+      });
+      window.scrollTo({
+        left: window.scrollX,
+        top: 0,
+        behavior: "auto"
+      });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [quizId]);
 
   useEffect(() => {
     const sheet = resultSheetRef.current;
@@ -906,8 +826,9 @@ export function StudentPage() {
   return (
     <motion.section
       animate={{ opacity: 1, y: 0 }}
-      className="stack student-page"
+      className={`stack student-page ${quizId && q ? "student-page--exam" : ""}`}
       initial={reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
+      ref={pageRef}
       transition={pageTransition}
     >
       {error ? <div className="banner banner--error">{error}</div> : null}
@@ -934,7 +855,7 @@ export function StudentPage() {
         {quizId && q ? (
           <motion.section
             animate={{ opacity: 1, y: 0 }}
-            className="panel student-console"
+            className="panel student-console student-console--exam"
             exit={reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
             initial={reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
             key="student-active-exam"
@@ -944,7 +865,7 @@ export function StudentPage() {
               <div className="student-console__rail-block">
                 <span className="eyebrow">Active exam</span>
                 <strong>{quizLevel ? `${tc(quizLevel)} level` : "Timed set"}</strong>
-                <p>You started this paper from the dashboard. Fill the journal rows and submit before time runs out.</p>
+                <p>Complete the journal and submit before time runs out.</p>
               </div>
 
               <div className={`timer-display ${secs !== null && secs <= 60 ? "timer-display--urgent" : ""}`}>{secs !== null ? ft(secs) : "--:--"}</div>
@@ -1000,7 +921,6 @@ export function StudentPage() {
               <div className="student-console__particulars">
                 <div className="student-console__particulars-head">
                   <span className="option-bank__label">Available particulars</span>
-                  <span className="pill pill--sky">Pick directly from the list</span>
                 </div>
                 <div className="chip-list">{q.options.map((option) => <span className="chip" key={option}>{option}</span>)}</div>
               </div>

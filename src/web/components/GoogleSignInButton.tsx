@@ -11,12 +11,43 @@ function resetGoogleIdentityScript() {
   managedScript?.remove();
 }
 
-function waitForGoogleIdentityApi(timeoutMs = 4000): Promise<void> {
+function waitForGoogleIdentityApi(timeoutMs = 20000): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const deadline = Date.now() + timeoutMs;
 
     const check = () => {
       if (window.google?.accounts?.id) {
+        resolve();
+        return;
+      }
+
+      if (Date.now() >= deadline) {
+        reject(new Error("Failed to load Google sign-in."));
+        return;
+      }
+
+      window.setTimeout(check, 50);
+    };
+
+    check();
+  });
+}
+
+function waitForRenderableContainer(container: HTMLDivElement, timeoutMs = 5000): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const deadline = Date.now() + timeoutMs;
+
+    const check = () => {
+      if (!container.isConnected) {
+        reject(new Error("Google sign-in container is unavailable."));
+        return;
+      }
+
+      const bounds = container.getBoundingClientRect();
+      const styles = window.getComputedStyle(container);
+      const isVisible = styles.display !== "none" && styles.visibility !== "hidden";
+
+      if (isVisible && bounds.width > 0) {
         resolve();
         return;
       }
@@ -120,6 +151,7 @@ export function GoogleSignInButton({
   const onCredentialRef = useRef(onCredential);
   const disabledRef = useRef(disabled);
   const [error, setError] = useState("");
+  const [retryNonce, setRetryNonce] = useState(0);
   const visibleLabel = getGoogleButtonLabel(text);
 
   useEffect(() => {
@@ -137,6 +169,7 @@ export function GoogleSignInButton({
     }
 
     let cancelled = false;
+    let retryTimer: number | null = null;
 
     const renderGoogleButton = async () => {
       const tryRender = async () => {
@@ -147,6 +180,12 @@ export function GoogleSignInButton({
         }
 
         const container = buttonRef.current;
+        await waitForRenderableContainer(container);
+
+        if (cancelled || !window.google?.accounts?.id) {
+          return;
+        }
+
         container.replaceChildren();
 
         // Use the direct credential callback flow in every environment.
@@ -174,39 +213,61 @@ export function GoogleSignInButton({
         });
       };
 
-      try {
-        setError("");
-        await tryRender();
-        if (!cancelled) {
-          setError("");
-        }
-      } catch (nextError) {
-        if (cancelled) {
-          return;
-        }
+      let lastError: unknown = null;
 
+      setError((currentError) => (currentError === "Google sign-in is not configured." ? currentError : ""));
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
-          resetGoogleIdentityScript();
           await tryRender();
           if (!cancelled) {
             setError("");
           }
-        } catch (retryError) {
+          return;
+        } catch (nextError) {
+          lastError = nextError;
           if (cancelled) {
             return;
           }
 
-          setError(retryError instanceof Error ? retryError.message : "Failed to initialize Google sign-in.");
+          resetGoogleIdentityScript();
+
+          if (attempt < 2) {
+            await new Promise((resolve) => window.setTimeout(resolve, 600));
+          }
         }
+      }
+
+      if (!cancelled && lastError) {
+        retryTimer = window.setTimeout(() => {
+          setRetryNonce((value) => value + 1);
+        }, 1800);
       }
     };
 
+    const rerenderOnVisibility = () => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      void renderGoogleButton();
+    };
+
     void renderGoogleButton();
+    window.addEventListener("pageshow", rerenderOnVisibility);
+    window.addEventListener("resize", rerenderOnVisibility);
+    document.addEventListener("visibilitychange", rerenderOnVisibility);
 
     return () => {
       cancelled = true;
+      if (retryTimer !== null) {
+        window.clearTimeout(retryTimer);
+      }
+      window.removeEventListener("pageshow", rerenderOnVisibility);
+      window.removeEventListener("resize", rerenderOnVisibility);
+      document.removeEventListener("visibilitychange", rerenderOnVisibility);
     };
-  }, [clientId, text]);
+  }, [clientId, text, retryNonce]);
 
   return (
     <div className="google-signin">
@@ -245,7 +306,7 @@ export function GoogleSignInButton({
         <div aria-disabled={disabled} className={`google-signin__button ${disabled ? "google-signin__button--disabled" : ""}`} ref={buttonRef} />
       </div>
 
-      {error ? <div className="google-signin__error">{error}</div> : null}
+      {error === "Google sign-in is not configured." ? <div className="google-signin__error">{error}</div> : null}
     </div>
   );
 }

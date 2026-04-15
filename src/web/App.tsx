@@ -1,4 +1,4 @@
-import { lazy, startTransition, Suspense, useEffect, useState } from "react";
+import { lazy, startTransition, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "framer-motion";
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import type { AuthStatusResponse, AuthenticatedAdmin, AuthenticatedStudent } from "../shared/types";
@@ -162,6 +162,7 @@ function getAdminLinks(user: AuthenticatedAdmin): MenuItem[] {
 export function App() {
   const location = useLocation();
   const reduceMotion = useReducedMotion();
+  const topbarRef = useRef<HTMLElement | null>(null);
   const [bootstrapState] = useState(() => {
     const cachedAuthStatus = readCachedAuthStatus();
     return {
@@ -174,6 +175,7 @@ export function App() {
   const [error, setError] = useState("");
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileMenuPanelFrame, setMobileMenuPanelFrame] = useState({ left: 12, top: 0, width: 0 });
 
   const preloadUserWorkspace = (user: AuthenticatedAdmin | AuthenticatedStudent) => Promise.allSettled([
     preloadWorkspaceRoute(user),
@@ -258,45 +260,62 @@ export function App() {
     localStorage.setItem("jet-theme", theme);
   }, [theme]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!menuOpen) return;
 
-    const scrollY = window.scrollY;
     const bodyStyle = document.body.style;
     const docStyle = document.documentElement.style;
     const previousBodyOverflow = bodyStyle.overflow;
-    const previousBodyPosition = bodyStyle.position;
-    const previousBodyTop = bodyStyle.top;
-    const previousBodyLeft = bodyStyle.left;
-    const previousBodyRight = bodyStyle.right;
-    const previousBodyWidth = bodyStyle.width;
     const previousBodyTouchAction = bodyStyle.touchAction;
     const previousDocOverflow = docStyle.overflow;
     const previousDocOverscrollBehavior = docStyle.overscrollBehavior;
 
     bodyStyle.overflow = "hidden";
-    bodyStyle.position = "fixed";
-    bodyStyle.top = `-${scrollY}px`;
-    bodyStyle.left = "0";
-    bodyStyle.right = "0";
-    bodyStyle.width = "100%";
     bodyStyle.touchAction = "none";
     docStyle.overflow = "hidden";
     docStyle.overscrollBehavior = "none";
 
     return () => {
       bodyStyle.overflow = previousBodyOverflow;
-      bodyStyle.position = previousBodyPosition;
-      bodyStyle.top = previousBodyTop;
-      bodyStyle.left = previousBodyLeft;
-      bodyStyle.right = previousBodyRight;
-      bodyStyle.width = previousBodyWidth;
       bodyStyle.touchAction = previousBodyTouchAction;
       docStyle.overflow = previousDocOverflow;
       docStyle.overscrollBehavior = previousDocOverscrollBehavior;
-      window.scrollTo(0, scrollY);
     };
   }, [menuOpen]);
+
+  useLayoutEffect(() => {
+    if (!menuOpen) return;
+
+    const updateMobileMenuOffset = () => {
+      const isPublicAuthRoute = !authStatus?.user && PUBLIC_AUTH_PATHS.has(location.pathname);
+
+      if (isPublicAuthRoute) {
+        const authFrame = document.querySelector(".auth-frame") as HTMLElement | null;
+        const authFrameRect = authFrame?.getBoundingClientRect();
+
+        if (authFrameRect && authFrameRect.width > 0) {
+          setMobileMenuPanelFrame({
+            top: Math.max(0, Math.round(authFrameRect.top)),
+            left: Math.max(0, Math.round(authFrameRect.left)),
+            width: Math.max(0, Math.round(authFrameRect.width))
+          });
+          return;
+        }
+      }
+
+      const topbarBounds = topbarRef.current?.getBoundingClientRect();
+      const nextTop = topbarBounds ? Math.max(0, Math.round(topbarBounds.bottom + 6)) : 0;
+      setMobileMenuPanelFrame({
+        left: 12,
+        top: nextTop,
+        width: Math.max(0, Math.round(window.innerWidth - 24))
+      });
+    };
+
+    updateMobileMenuOffset();
+    window.addEventListener("resize", updateMobileMenuOffset);
+    return () => window.removeEventListener("resize", updateMobileMenuOffset);
+  }, [authStatus?.user, menuOpen, location.pathname]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -372,29 +391,27 @@ export function App() {
   const mobileMenuKicker = user ? workspaceKicker : "Quick access";
   const mobileMenuEase = [0.22, 1, 0.36, 1] as const;
   const mobileMenuCloseEase = [0.4, 0, 1, 1] as const;
-  const mobileMenuSpring = {
-    type: "spring" as const,
-    stiffness: 420,
-    damping: 36,
-    mass: 0.78
-  };
   const mobileMenuPanelVariants = {
-    animate: reduceMotion ? { y: 0 } : {
+    animate: reduceMotion ? { opacity: 1, y: 0 } : {
+      opacity: 1,
       y: 0,
       transition: {
-        y: mobileMenuSpring
+        duration: 0.22,
+        ease: mobileMenuEase
       }
     },
-    exit: reduceMotion ? { y: 16 } : {
-      y: 14,
+    exit: reduceMotion ? { opacity: 1, y: 0 } : {
+      opacity: 0,
+      y: 8,
       transition: {
-        y: {
-          duration: 0.16,
-          ease: mobileMenuCloseEase
-        }
+        duration: 0.18,
+        ease: mobileMenuCloseEase
       }
     },
-    initial: reduceMotion ? { y: 0 } : { y: 18 }
+    initial: reduceMotion ? { opacity: 1, y: 0 } : {
+      opacity: 0,
+      y: 12
+    }
   };
   const mobileProfileLine = user
     ? user.role === "admin"
@@ -405,6 +422,7 @@ export function App() {
   const isAdminWorkspaceRoute = location.pathname.startsWith("/admin/");
   const isStudentWorkspaceRoute = location.pathname.startsWith("/student/") && !PUBLIC_AUTH_PATHS.has(location.pathname);
   const isWorkspaceRoute = Boolean(user) && (isAdminWorkspaceRoute || isStudentWorkspaceRoute);
+  const hideUnderlyingPageForMenu = menuOpen && isWorkspaceRoute;
   const isAdminWorkspacePage = Boolean(user?.role === "admin" && isAdminWorkspaceRoute);
   const routeTransitionKey = isPublicAuthPage
     ? "public-auth"
@@ -431,6 +449,103 @@ export function App() {
           mass: 0.82
         }
       };
+
+  const renderMobileMenuBody = () => (
+    <div className="mobile-menu-screen__body">
+      <div className="mobile-menu-screen__top">
+        <div className="mobile-menu-screen__top-copy">
+          <span>{mobileMenuKicker}</span>
+          <strong id="mobile-menu-title">{mobileMenuTitle}</strong>
+        </div>
+      </div>
+
+      {user ? (
+        <div className="mobile-menu-screen__profile">
+          <strong>{user.name}</strong>
+          <span>{mobileProfileLine}</span>
+        </div>
+      ) : null}
+
+      {mobileMenuItems.length ? (
+        <div className="mobile-menu-screen__section">
+          <span className="mobile-menu-screen__section-label">{user ? "Workspace" : "Navigation"}</span>
+          <nav aria-label="Mobile menu list" className="mobile-menu-screen__nav">
+            {mobileMenuItems.map((item) => (
+              <div key={item.to}>
+                <NavLink
+                  className={({ isActive }) => `mobile-menu-screen__link ${isActive ? "mobile-menu-screen__link--active" : ""}`}
+                  onClick={() => setMenuOpen(false)}
+                  to={item.to}
+                >
+                  <div className="mobile-menu-screen__link-copy">
+                    <strong>{item.label}</strong>
+                    <small>{item.description}</small>
+                  </div>
+                  <svg fill="none" height="18" viewBox="0 0 24 24" width="18">
+                    <path d="m9 6 6 6-6 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  </svg>
+                </NavLink>
+              </div>
+            ))}
+          </nav>
+        </div>
+      ) : null}
+
+      <div className="mobile-menu-screen__section">
+        <span className="mobile-menu-screen__section-label">Quick actions</span>
+        <div className="mobile-menu-screen__actions">
+          <div>
+            <button className="mobile-menu-screen__action" onClick={toggleTheme} type="button">
+              <div className="mobile-menu-screen__link-copy">
+                <strong>{theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}</strong>
+                <small>Current theme: {theme}</small>
+              </div>
+              {theme === "dark" ? (
+                <svg fill="none" height="18" viewBox="0 0 24 24" width="18">
+                  <circle cx="12" cy="12" r="4.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  <path d="M12 2.25V4.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  <path d="M12 19.5v2.25" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  <path d="M4.93 4.93l1.6 1.6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  <path d="M17.47 17.47l1.6 1.6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  <path d="M2.25 12H4.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  <path d="M19.5 12h2.25" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  <path d="M4.93 19.07l1.6-1.6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  <path d="M17.47 6.53l1.6-1.6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                </svg>
+              ) : (
+                <svg fill="none" height="18" viewBox="0 0 24 24" width="18">
+                  <path d="M21 12.2a8.8 8.8 0 1 1-9.2-9.2 7 7 0 0 0 9.2 9.2z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                </svg>
+              )}
+            </button>
+          </div>
+
+          {user ? (
+            <div>
+              <button
+                className="mobile-menu-screen__action mobile-menu-screen__action--danger"
+                onClick={() => {
+                  setMenuOpen(false);
+                  void handleLogout();
+                }}
+                type="button"
+              >
+                <div className="mobile-menu-screen__link-copy">
+                  <strong>Sign out</strong>
+                  <small>End the current session and return to login.</small>
+                </div>
+                <svg fill="none" height="18" viewBox="0 0 24 24" width="18">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  <path d="m16 17 5-5-5-5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                  <path d="M21 12H9" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                </svg>
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
 
   const renderAuthPage = (view: AuthView) => (
     <AuthPage applyAuthStatus={applyAuthStatus} authStatus={authStatus} refreshAuth={refreshAuth} view={view} />
@@ -496,7 +611,7 @@ export function App() {
       ) : null}
 
       {isPublicAuthPage ? (
-        <header className="topbar topbar--simple topbar--bare">
+        <header className="topbar topbar--simple topbar--bare" ref={topbarRef}>
           <Link className="brand brand--logo-only" to={homePath}>
             <img alt="SkillSpark" className="brand__logo brand__logo--header" src={logoUrl} />
           </Link>
@@ -518,7 +633,7 @@ export function App() {
           </div>
         </header>
       ) : (
-        <header className={`topbar ${menuOpen ? "topbar--menu-open" : ""} ${user ? "topbar--bare-workspace" : ""}`}>
+        <header className={`topbar ${menuOpen ? "topbar--menu-open" : ""} ${user ? "topbar--bare-workspace" : ""}`} ref={topbarRef}>
           <div className="topbar__main">
             <Link className="brand brand--logo-only" to={homePath}>
               <img alt="SkillSpark" className="brand__logo brand__logo--header" src={logoUrl} />
@@ -572,7 +687,7 @@ export function App() {
       )}
 
       <AnimatePresence initial={false}>
-        {menuOpen ? (
+        {menuOpen && !isPublicAuthPage ? (
           <motion.section
             animate={{ opacity: 1 }}
             aria-labelledby="mobile-menu-title"
@@ -584,127 +699,32 @@ export function App() {
             role="dialog"
             transition={{ duration: 0 }}
           >
-            <button
-              aria-label="Close menu"
-              className="mobile-menu-screen__backdrop"
-              onClick={() => setMenuOpen(false)}
-              type="button"
-            />
-
             <motion.div
               animate="animate"
               className="mobile-menu-screen__panel"
               exit="exit"
               initial="initial"
-              onClick={(event) => event.stopPropagation()}
+              style={{
+                left: `${mobileMenuPanelFrame.left}px`,
+                position: "absolute",
+                top: mobileMenuPanelFrame.top ? `${mobileMenuPanelFrame.top}px` : "0px",
+                width: mobileMenuPanelFrame.width ? `${mobileMenuPanelFrame.width}px` : "calc(100% - 24px)"
+              }}
               variants={mobileMenuPanelVariants}
             >
-              <div className="mobile-menu-screen__body">
-                <div className="mobile-menu-screen__top">
-                  <div className="mobile-menu-screen__top-copy">
-                    <span>{mobileMenuKicker}</span>
-                    <strong id="mobile-menu-title">{mobileMenuTitle}</strong>
-                  </div>
-                </div>
-
-                {user ? (
-                  <div className="mobile-menu-screen__profile">
-                    <strong>{user.name}</strong>
-                    <span>{mobileProfileLine}</span>
-                  </div>
-                ) : null}
-
-                {mobileMenuItems.length ? (
-                  <div className="mobile-menu-screen__section">
-                    <span className="mobile-menu-screen__section-label">{user ? "Workspace" : "Navigation"}</span>
-                    <nav aria-label="Mobile menu list" className="mobile-menu-screen__nav">
-                      {mobileMenuItems.map((item) => (
-                        <div key={item.to}>
-                          <NavLink
-                            className={({ isActive }) => `mobile-menu-screen__link ${isActive ? "mobile-menu-screen__link--active" : ""}`}
-                            onClick={() => setMenuOpen(false)}
-                            to={item.to}
-                          >
-                            <div className="mobile-menu-screen__link-copy">
-                              <strong>{item.label}</strong>
-                              <small>{item.description}</small>
-                            </div>
-                            <svg fill="none" height="18" viewBox="0 0 24 24" width="18">
-                              <path d="m9 6 6 6-6 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                            </svg>
-                          </NavLink>
-                        </div>
-                      ))}
-                    </nav>
-                  </div>
-                ) : null}
-
-                <div className="mobile-menu-screen__section">
-                  <span className="mobile-menu-screen__section-label">Quick actions</span>
-                  <div className="mobile-menu-screen__actions">
-                    <div>
-                      <button className="mobile-menu-screen__action" onClick={toggleTheme} type="button">
-                        <div className="mobile-menu-screen__link-copy">
-                          <strong>{theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}</strong>
-                          <small>Current theme: {theme}</small>
-                        </div>
-                        {theme === "dark" ? (
-                          <svg fill="none" height="18" viewBox="0 0 24 24" width="18">
-                            <circle cx="12" cy="12" r="4.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                            <path d="M12 2.25V4.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                            <path d="M12 19.5v2.25" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                            <path d="M4.93 4.93l1.6 1.6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                            <path d="M17.47 17.47l1.6 1.6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                            <path d="M2.25 12H4.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                            <path d="M19.5 12h2.25" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                            <path d="M4.93 19.07l1.6-1.6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                            <path d="M17.47 6.53l1.6-1.6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                          </svg>
-                        ) : (
-                          <svg fill="none" height="18" viewBox="0 0 24 24" width="18">
-                            <path d="M21 12.2a8.8 8.8 0 1 1-9.2-9.2 7 7 0 0 0 9.2 9.2z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                          </svg>
-                        )}
-                      </button>
-                    </div>
-
-                    {user ? (
-                      <div>
-                        <button
-                          className="mobile-menu-screen__action mobile-menu-screen__action--danger"
-                          onClick={() => {
-                            setMenuOpen(false);
-                            void handleLogout();
-                          }}
-                          type="button"
-                        >
-                          <div className="mobile-menu-screen__link-copy">
-                            <strong>Sign out</strong>
-                            <small>End the current session and return to login.</small>
-                          </div>
-                          <svg fill="none" height="18" viewBox="0 0 24 24" width="18">
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                            <path d="m16 17 5-5-5-5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                            <path d="M21 12H9" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-                          </svg>
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
+              {renderMobileMenuBody()}
             </motion.div>
           </motion.section>
         ) : null}
       </AnimatePresence>
 
       {error ? (
-        <div className="app-banner-wrap">
+        <div className={`app-banner-wrap ${hideUnderlyingPageForMenu ? "app-banner-wrap--menu-hidden" : ""}`}>
           <div className="banner banner--error">{error}</div>
         </div>
       ) : null}
 
-      <main className={`page ${isPublicAuthPage ? "page--public-auth" : ""} ${isAdminWorkspacePage ? "page--admin-workspace" : ""}`}>
+      <main className={`page ${isPublicAuthPage ? "page--public-auth" : ""} ${isAdminWorkspacePage ? "page--admin-workspace" : ""} ${hideUnderlyingPageForMenu ? "page--menu-hidden" : ""}`}>
         <ErrorBoundary>
         {authBooting ? (
           <WorkspaceBoot
@@ -712,6 +732,12 @@ export function App() {
             title="Restoring your current page."
             copy="Checking your session and warming the next workspace."
           />
+        ) : menuOpen && isPublicAuthPage ? (
+          <section className="auth-shell auth-shell--mobile-menu">
+            <div className="panel auth-frame mobile-menu-auth-frame">
+              {renderMobileMenuBody()}
+            </div>
+          </section>
         ) : (
           <AnimatePresence initial={false} mode="sync">
             <motion.div

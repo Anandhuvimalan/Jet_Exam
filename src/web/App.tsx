@@ -1,4 +1,4 @@
-import { lazy, startTransition, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { lazy, startTransition, Suspense, useEffect, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "framer-motion";
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import type { AuthStatusResponse, AuthenticatedAdmin, AuthenticatedStudent } from "../shared/types";
@@ -175,7 +175,6 @@ export function App() {
   const [error, setError] = useState("");
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [mobileMenuPanelFrame, setMobileMenuPanelFrame] = useState({ left: 12, top: 0, width: 0 });
 
   const preloadUserWorkspace = (user: AuthenticatedAdmin | AuthenticatedStudent) => Promise.allSettled([
     preloadWorkspaceRoute(user),
@@ -260,63 +259,6 @@ export function App() {
     localStorage.setItem("jet-theme", theme);
   }, [theme]);
 
-  useLayoutEffect(() => {
-    if (!menuOpen) return;
-
-    const bodyStyle = document.body.style;
-    const docStyle = document.documentElement.style;
-    const previousBodyOverflow = bodyStyle.overflow;
-    const previousBodyTouchAction = bodyStyle.touchAction;
-    const previousDocOverflow = docStyle.overflow;
-    const previousDocOverscrollBehavior = docStyle.overscrollBehavior;
-
-    bodyStyle.overflow = "hidden";
-    bodyStyle.touchAction = "none";
-    docStyle.overflow = "hidden";
-    docStyle.overscrollBehavior = "none";
-
-    return () => {
-      bodyStyle.overflow = previousBodyOverflow;
-      bodyStyle.touchAction = previousBodyTouchAction;
-      docStyle.overflow = previousDocOverflow;
-      docStyle.overscrollBehavior = previousDocOverscrollBehavior;
-    };
-  }, [menuOpen]);
-
-  useLayoutEffect(() => {
-    if (!menuOpen) return;
-
-    const updateMobileMenuOffset = () => {
-      const isPublicAuthRoute = !authStatus?.user && PUBLIC_AUTH_PATHS.has(location.pathname);
-
-      if (isPublicAuthRoute) {
-        const authFrame = document.querySelector(".auth-frame") as HTMLElement | null;
-        const authFrameRect = authFrame?.getBoundingClientRect();
-
-        if (authFrameRect && authFrameRect.width > 0) {
-          setMobileMenuPanelFrame({
-            top: Math.max(0, Math.round(authFrameRect.top)),
-            left: Math.max(0, Math.round(authFrameRect.left)),
-            width: Math.max(0, Math.round(authFrameRect.width))
-          });
-          return;
-        }
-      }
-
-      const topbarBounds = topbarRef.current?.getBoundingClientRect();
-      const nextTop = topbarBounds ? Math.max(0, Math.round(topbarBounds.bottom + 6)) : 0;
-      setMobileMenuPanelFrame({
-        left: 12,
-        top: nextTop,
-        width: Math.max(0, Math.round(window.innerWidth - 24))
-      });
-    };
-
-    updateMobileMenuOffset();
-    window.addEventListener("resize", updateMobileMenuOffset);
-    return () => window.removeEventListener("resize", updateMobileMenuOffset);
-  }, [authStatus?.user, menuOpen, location.pathname]);
-
   useEffect(() => {
     const controller = new AbortController();
     void refreshAuth({
@@ -389,30 +331,6 @@ export function App() {
   const workspaceKicker = user ? (user.role === "admin" ? "Operations panel" : "Exam panel") : "";
   const mobileMenuTitle = user ? workspaceLabel : "SkillSpark menu";
   const mobileMenuKicker = user ? workspaceKicker : "Quick access";
-  const mobileMenuEase = [0.22, 1, 0.36, 1] as const;
-  const mobileMenuCloseEase = [0.4, 0, 1, 1] as const;
-  const mobileMenuPanelVariants = {
-    animate: reduceMotion ? { opacity: 1, y: 0 } : {
-      opacity: 1,
-      y: 0,
-      transition: {
-        duration: 0.22,
-        ease: mobileMenuEase
-      }
-    },
-    exit: reduceMotion ? { opacity: 1, y: 0 } : {
-      opacity: 0,
-      y: 8,
-      transition: {
-        duration: 0.18,
-        ease: mobileMenuCloseEase
-      }
-    },
-    initial: reduceMotion ? { opacity: 1, y: 0 } : {
-      opacity: 0,
-      y: 12
-    }
-  };
   const mobileProfileLine = user
     ? user.role === "admin"
       ? `${user.isSuperAdmin ? "Super admin" : "Administrator"} • ${user.email}`
@@ -422,7 +340,6 @@ export function App() {
   const isAdminWorkspaceRoute = location.pathname.startsWith("/admin/");
   const isStudentWorkspaceRoute = location.pathname.startsWith("/student/") && !PUBLIC_AUTH_PATHS.has(location.pathname);
   const isWorkspaceRoute = Boolean(user) && (isAdminWorkspaceRoute || isStudentWorkspaceRoute);
-  const hideUnderlyingPageForMenu = menuOpen && isWorkspaceRoute;
   const isAdminWorkspacePage = Boolean(user?.role === "admin" && isAdminWorkspaceRoute);
   const routeTransitionKey = isPublicAuthPage
     ? "public-auth"
@@ -545,6 +462,14 @@ export function App() {
         </div>
       </div>
     </div>
+  );
+
+  const renderMobileMenuPage = () => (
+    <section className={`mobile-menu-page ${isWorkspaceRoute ? "mobile-menu-page--workspace" : "mobile-menu-page--public"}`}>
+      <div className="panel mobile-menu-page__panel">
+        {renderMobileMenuBody()}
+      </div>
+    </section>
   );
 
   const renderAuthPage = (view: AuthView) => (
@@ -686,45 +611,13 @@ export function App() {
         </header>
       )}
 
-      <AnimatePresence initial={false}>
-        {menuOpen && !isPublicAuthPage ? (
-          <motion.section
-            animate={{ opacity: 1 }}
-            aria-labelledby="mobile-menu-title"
-            aria-modal="true"
-            className="mobile-menu-screen"
-            exit={{ opacity: 1 }}
-            id="mobile-menu-screen"
-            initial={{ opacity: 1 }}
-            role="dialog"
-            transition={{ duration: 0 }}
-          >
-            <motion.div
-              animate="animate"
-              className="mobile-menu-screen__panel"
-              exit="exit"
-              initial="initial"
-              style={{
-                left: `${mobileMenuPanelFrame.left}px`,
-                position: "absolute",
-                top: mobileMenuPanelFrame.top ? `${mobileMenuPanelFrame.top}px` : "0px",
-                width: mobileMenuPanelFrame.width ? `${mobileMenuPanelFrame.width}px` : "calc(100% - 24px)"
-              }}
-              variants={mobileMenuPanelVariants}
-            >
-              {renderMobileMenuBody()}
-            </motion.div>
-          </motion.section>
-        ) : null}
-      </AnimatePresence>
-
       {error ? (
-        <div className={`app-banner-wrap ${hideUnderlyingPageForMenu ? "app-banner-wrap--menu-hidden" : ""}`}>
+        <div className="app-banner-wrap">
           <div className="banner banner--error">{error}</div>
         </div>
       ) : null}
 
-      <main className={`page ${isPublicAuthPage ? "page--public-auth" : ""} ${isAdminWorkspacePage ? "page--admin-workspace" : ""} ${hideUnderlyingPageForMenu ? "page--menu-hidden" : ""}`}>
+      <main className={`page ${isPublicAuthPage ? "page--public-auth" : ""} ${isAdminWorkspacePage ? "page--admin-workspace" : ""}`}>
         <ErrorBoundary>
         {authBooting ? (
           <WorkspaceBoot
@@ -732,12 +625,8 @@ export function App() {
             title="Restoring your current page."
             copy="Checking your session and warming the next workspace."
           />
-        ) : menuOpen && isPublicAuthPage ? (
-          <section className="auth-shell auth-shell--mobile-menu">
-            <div className="panel auth-frame mobile-menu-auth-frame">
-              {renderMobileMenuBody()}
-            </div>
-          </section>
+        ) : menuOpen ? (
+          renderMobileMenuPage()
         ) : (
           <AnimatePresence initial={false} mode="sync">
             <motion.div

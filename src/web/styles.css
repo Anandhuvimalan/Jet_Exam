@@ -961,6 +961,20 @@ img {
   min-height: 100%;
 }
 
+.mobile-menu-page {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  align-items: flex-start;
+}
+
+.mobile-menu-page__panel {
+  width: 100%;
+  min-width: 0;
+}
+
 .stack {
   display: grid;
   gap: 18px;
@@ -1482,14 +1496,17 @@ input[type="checkbox"] {
 .auth-progress-overlay {
   position: fixed;
   inset: 0;
-  z-index: 140;
+  z-index: 220;
   display: grid;
   place-items: center;
-  padding: 24px;
-  background:
-    linear-gradient(180deg, rgba(2, 6, 23, 0.42), rgba(2, 6, 23, 0.74)),
-    color-mix(in srgb, var(--bg-root) 72%, transparent);
-  backdrop-filter: blur(18px);
+  padding:
+    max(24px, env(safe-area-inset-top, 0px))
+    max(16px, env(safe-area-inset-right, 0px))
+    max(24px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
+  background: color-mix(in srgb, var(--bg-root) 84%, rgba(2, 6, 23, 0.78));
+  backdrop-filter: blur(22px) saturate(1.06);
+  -webkit-backdrop-filter: blur(22px) saturate(1.06);
 }
 
 .auth-progress-card {
@@ -1547,6 +1564,22 @@ input[type="checkbox"] {
       rgba(45, 212, 191, 0.82) 78%,
       rgba(45, 212, 191, 0) 100%);
   animation: pageBootSlide 0.95s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@media (max-width: 860px) {
+  .auth-progress-overlay {
+    padding:
+      max(18px, env(safe-area-inset-top, 0px))
+      max(14px, env(safe-area-inset-right, 0px))
+      max(18px, env(safe-area-inset-bottom, 0px))
+      max(14px, env(safe-area-inset-left, 0px));
+  }
+
+  .auth-progress-card {
+    width: min(440px, calc(100vw - 28px));
+    padding: 24px 22px;
+    border-radius: 24px;
+  }
 }
 
 .auth-frame {
@@ -7114,6 +7147,7 @@ input[type="checkbox"] {
   gap: 18px;
   width: min(520px, calc(100vw - 40px));
   margin-inline: auto;
+  min-height: min(420px, calc(100dvh - 180px));
   padding: 48px 0 24px;
   align-content: center;
   justify-items: stretch;
@@ -7335,6 +7369,10 @@ input[type="checkbox"] {
   .student-console__stats,
   .journal-mobile-card__amounts {
     grid-template-columns: 1fr;
+  }
+
+  .student-console__rail {
+    border-radius: 24px;
   }
 
   .question-workbench__head {
@@ -7816,18 +7854,15 @@ input[type="checkbox"] {
 }
 
 @media (max-width: 860px) {
-  .auth-shell--mobile-menu {
-    min-height: 0;
-    width: 100%;
-    flex: 1 1 auto;
+  .mobile-menu-page__panel {
+    padding: 14px;
+    border-radius: 18px;
+    overflow: hidden;
   }
 
-  .mobile-menu-auth-frame {
-    grid-template-columns: 1fr;
-    gap: 0;
-    align-items: start;
-    width: 100%;
-    min-width: 0;
+  .page-boot {
+    min-height: calc(100dvh - 128px);
+    padding: 12px 0 18px;
   }
 
   .topbar {

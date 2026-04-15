@@ -1,5 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { AuthStatusResponse, GoogleAuthRequest } from "../../shared/types";
 import { loginWithGoogle } from "../api";
 import { AuthFlowFieldBackground } from "../components/AuthFlowFieldBackground";
@@ -185,6 +186,27 @@ export function AuthPage({ applyAuthStatus, authStatus, refreshAuth, view }: Aut
     ? { duration: 0 }
     : { type: "spring" as const, stiffness: 340, damping: 32, mass: 0.82 };
 
+  const progressOverlay = loading && typeof document !== "undefined"
+    ? createPortal(
+        <div aria-live="polite" className="auth-progress-overlay" role="status">
+          <div className="auth-progress-card">
+            <div aria-hidden="true" className="auth-progress-orb" />
+            <span className="eyebrow">{meta.tone === "admin" ? "Admin sign-in" : "Student sign-in"}</span>
+            <h3>Opening your workspace.</h3>
+            <p className="section-copy">
+              {meta.tone === "admin"
+                ? "Verifying your Google account and preparing the admin workspace."
+                : "Verifying your Google account and preparing your exam workspace."}
+            </p>
+            <div aria-hidden="true" className="auth-progress-track">
+              <span />
+            </div>
+          </div>
+        </div>,
+        document.body
+      )
+    : null;
+
   const submitGoogleLogin = async (payload: GoogleAuthRequest) => {
     try {
       setLoading(true);
@@ -243,23 +265,7 @@ export function AuthPage({ applyAuthStatus, authStatus, refreshAuth, view }: Aut
         </div>
       </div>
 
-      {loading ? (
-        <div aria-live="polite" className="auth-progress-overlay" role="status">
-          <div className="auth-progress-card">
-            <div aria-hidden="true" className="auth-progress-orb" />
-            <span className="eyebrow">{meta.tone === "admin" ? "Admin sign-in" : "Student sign-in"}</span>
-            <h3>Opening your workspace.</h3>
-            <p className="section-copy">
-              {meta.tone === "admin"
-                ? "Verifying your Google account and preparing the admin workspace."
-                : "Verifying your Google account and preparing your exam workspace."}
-            </p>
-            <div aria-hidden="true" className="auth-progress-track">
-              <span />
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {progressOverlay}
     </section>
   );
 }

@@ -330,6 +330,10 @@ function buildStudentAccessWindow(accessDays: number, baseTimeMs = Date.now()): 
   };
 }
 
+function normalizeStudentRegisterNumberKey(value: string): string {
+  return normalizeGoogleEmail(value).toLowerCase();
+}
+
 function normalizeImportedStudents(importedStudents: ImportedStudent[]): {
   students: Array<{
     registerNumber: string;
@@ -360,7 +364,7 @@ function normalizeImportedStudents(importedStudents: ImportedStudent[]): {
     }
 
     const accessDays = validateAccessDays(student.accessDays);
-    const emailKey = registerNumber.toLowerCase();
+    const emailKey = normalizeStudentRegisterNumberKey(registerNumber);
 
     if (seenEmails.has(emailKey)) {
       skippedDuplicates += 1;
@@ -1024,15 +1028,33 @@ export class PlatformStore {
     let created = 0;
     let skipped = skippedDuplicates;
 
-    withTransaction(this.requireDb(), () => {
-      for (const importedStudent of normalizedStudents) {
-        const existing = this.findStudentByRegisterNumber(importedStudent.registerNumber);
+    if (!normalizedStudents.length) {
+      return {
+        created: 0,
+        skipped,
+        totalStudents: this.getStudentCount()
+      };
+    }
 
-        if (existing) {
+    withTransaction(this.requireDb(), () => {
+      const knownRegisterNumberKeys = new Set(
+        (
+          this.requireDb().prepare(`
+            SELECT register_number AS registerNumber
+            FROM students
+          `).all() as Array<{ registerNumber: string }>
+        ).map((row) => normalizeStudentRegisterNumberKey(row.registerNumber))
+      );
+
+      for (const importedStudent of normalizedStudents) {
+        const registerNumberKey = normalizeStudentRegisterNumberKey(importedStudent.registerNumber);
+
+        if (knownRegisterNumberKeys.has(registerNumberKey)) {
           skipped += 1;
           continue;
         }
 
+        knownRegisterNumberKeys.add(registerNumberKey);
         const timestamp = nowIso();
         const accessWindow = buildStudentAccessWindow(importedStudent.accessDays);
         this.insertStudent({

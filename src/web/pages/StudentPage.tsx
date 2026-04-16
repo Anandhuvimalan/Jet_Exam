@@ -821,6 +821,42 @@ export function StudentPage() {
   const pageTransition = reduceMotion ? { duration: 0 } : { type: "spring" as const, stiffness: 340, damping: 32, mass: 0.84 };
   const panelTransition = reduceMotion ? { duration: 0 } : { type: "spring" as const, stiffness: 360, damping: 34, mass: 0.82 };
   const overlayTransition = reduceMotion ? { duration: 0 } : { type: "spring" as const, stiffness: 380, damping: 36, mass: 0.8 };
+  const modalBackdropTransition = reduceMotion ? { duration: 0 } : { duration: 0.16, ease: motionEase };
+  const modalExitTransition = reduceMotion ? { duration: 0 } : { duration: 0.14, ease: [0.4, 0, 1, 1] as const };
+  const modalBackdropVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: modalBackdropTransition },
+    exit: { opacity: 0, transition: modalExitTransition }
+  };
+  const modalDialogVariants = reduceMotion
+    ? {
+        hidden: { opacity: 0, y: 0, scale: 1 },
+        visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0 } },
+        exit: { opacity: 0, y: 0, scale: 1, transition: { duration: 0 } }
+      }
+    : {
+        hidden: { opacity: 0, y: 18, scale: 0.985 },
+        visible: {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          transition: {
+            opacity: { duration: 0.18, delay: 0.05, ease: motionEase },
+            y: { duration: 0.2, delay: 0.05, ease: motionEase },
+            scale: { duration: 0.2, delay: 0.05, ease: motionEase }
+          }
+        },
+        exit: {
+          opacity: 0,
+          y: 12,
+          scale: 0.992,
+          transition: {
+            opacity: { duration: 0.12, ease: [0.4, 0, 1, 1] as const },
+            y: { duration: 0.14, ease: [0.4, 0, 1, 1] as const },
+            scale: { duration: 0.14, ease: [0.4, 0, 1, 1] as const }
+          }
+        }
+      };
   const overlayRoot = typeof document !== "undefined" ? document.body : null;
 
   return (
@@ -1447,25 +1483,28 @@ export function StudentPage() {
           <AnimatePresence>
             {submitConfirmOpen ? (
               <motion.div
-                animate={{ opacity: 1 }}
                 className="student-result-overlay student-result-overlay--dialog"
-                exit={{ opacity: 0 }}
-                initial={{ opacity: 0 }}
-                transition={overlayTransition}
+                exit={{ opacity: 1 }}
+                initial={{ opacity: 1 }}
+                animate={{ opacity: 1 }}
               >
-                <button
+                <motion.button
                   aria-label="Close submit confirmation"
                   className="student-result-overlay__backdrop"
+                  animate="visible"
+                  exit="exit"
+                  initial="hidden"
                   onClick={() => setSubmitConfirmOpen(false)}
+                  variants={modalBackdropVariants}
                   type="button"
                 />
 
                 <motion.section
-                  animate={{ opacity: 1, y: 0 }}
+                  animate="visible"
                   className="panel student-submit-dialog"
-                  exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
-                  initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
-                  transition={overlayTransition}
+                  exit="exit"
+                  initial="hidden"
+                  variants={modalDialogVariants}
                 >
                   <span className="eyebrow">Confirm submit</span>
                   <h3>Submit this exam now?</h3>

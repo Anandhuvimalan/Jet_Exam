@@ -91,6 +91,7 @@ function nowIso() { return new Date().toISOString(); }
 function isValidDateValue(value: string | null | undefined): value is string { return typeof value === "string" && Number.isFinite(new Date(value).getTime()); }
 function validateAccessDays(value: number): number { if (!Number.isInteger(value) || value < 1 || value > 3650) throw new Error("Access days must be a whole number between 1 and 3650."); return value; }
 function buildStudentAccessWindow(accessDays: number, baseTimeMs = Date.now()) { const normalizedAccessDays = validateAccessDays(accessDays); return { accessStartsAt: new Date(baseTimeMs).toISOString(), accessExpiresAt: new Date(baseTimeMs + normalizedAccessDays * ACCESS_DAY_MS).toISOString() }; }
+function normalizeStudentRegisterNumberKey(value: string) { return normalizeGoogleEmail(value).toLowerCase(); }
 function normalizeImportedStudents(importedStudents: ImportedStudent[]) {
   const normalizedStudents: Array<{
     registerNumber: string;
@@ -114,7 +115,7 @@ function normalizeImportedStudents(importedStudents: ImportedStudent[]) {
     }
 
     const accessDays = validateAccessDays(student.accessDays);
-    const emailKey = registerNumber.toLowerCase();
+    const emailKey = normalizeStudentRegisterNumberKey(registerNumber);
 
     if (seenEmails.has(emailKey)) {
       skippedDuplicates += 1;
@@ -655,29 +656,19 @@ export class PostgresPlatformStore {
         WHERE email = ANY($1::citext[])`,
         [normalizedStudents.map((student) => student.registerNumber)]
       );
-      const existingByRegisterNumber = new Map(
-        existingRows.map((row) => [row.register_number.toLowerCase(), {
-          id: row.id,
-          registerNumber: row.register_number,
-          name: row.name,
-          registeredName: null,
-          passwordHash: null,
-          passwordSalt: null,
-          accessStartsAt: isValidDateValue(row.access_starts_at) ? row.access_starts_at : row.created_at,
-          accessExpiresAt: isValidDateValue(row.access_expires_at) ? row.access_expires_at : row.created_at,
-          createdAt: row.created_at,
-          updatedAt: row.updated_at
-        } satisfies StudentRecord])
+      const knownRegisterNumberKeys = new Set(
+        existingRows.map((row) => normalizeStudentRegisterNumberKey(row.register_number))
       );
       const rowsToInsert = [];
 
       for (const importedStudent of normalizedStudents) {
-        const existing = existingByRegisterNumber.get(importedStudent.registerNumber.toLowerCase());
-        if (existing) {
+        const registerNumberKey = normalizeStudentRegisterNumberKey(importedStudent.registerNumber);
+        if (knownRegisterNumberKeys.has(registerNumberKey)) {
           skipped += 1;
           continue;
         }
 
+        knownRegisterNumberKeys.add(registerNumberKey);
         const timestamp = nowIso();
         const accessWindow = buildStudentAccessWindow(importedStudent.accessDays);
         rowsToInsert.push({

@@ -20,15 +20,20 @@ function prefersReducedMotion() {
     && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+function canHostPickerScroll(node: HTMLElement | null) {
+  if (!node) {
+    return false;
+  }
+
+  const style = window.getComputedStyle(node);
+  return /(auto|scroll|overlay)/.test(style.overflowY);
+}
+
 function findScrollableAncestor(node: HTMLElement | null) {
   let current = node?.parentElement ?? null;
 
   while (current) {
-    const style = window.getComputedStyle(current);
-    const overflowY = style.overflowY;
-    const scrollable = /(auto|scroll|overlay)/.test(overflowY);
-
-    if (scrollable) {
+    if (canHostPickerScroll(current)) {
       return current;
     }
 
@@ -39,7 +44,20 @@ function findScrollableAncestor(node: HTMLElement | null) {
 }
 
 function findPageScrollRoot(node: HTMLElement | null) {
-  return node?.closest(".admin-console__main, .shell--workspace, .shell--public-auth") as HTMLElement | null;
+  let current = node?.parentElement ?? null;
+
+  while (current) {
+    if (
+      current.matches(".admin-console__main, .student-result-overlay, .student-result-sheet, .shell--workspace, .shell--public-auth")
+      && canHostPickerScroll(current)
+    ) {
+      return current;
+    }
+
+    current = current.parentElement;
+  }
+
+  return null;
 }
 
 function findPageSpacerTarget(node: HTMLElement | null) {

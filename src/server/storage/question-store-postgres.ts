@@ -96,7 +96,13 @@ function compareQuestionNo(left: string, right: string): number {
 }
 
 function normalizeQuestionPrompt(value: string): string {
-  return value.replace(/\s+/g, " ").trim().toLowerCase();
+  return value
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/%/g, " percent ")
+    .replace(/[^a-z0-9]+/g, "")
+    .trim();
 }
 
 function normalizeQuestionNumber(value: string): string {

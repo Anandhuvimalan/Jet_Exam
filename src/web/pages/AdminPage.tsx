@@ -1,5 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, NavLink } from "react-router-dom";
 import type {
   AdminAssistantMessage,
@@ -372,12 +373,49 @@ export function AdminPage({ user, section }: AdminPageProps) {
   const mainScrollRef = useRef<HTMLDivElement | null>(null);
   const assistantLogRef = useRef<HTMLDivElement | null>(null);
   const assistantInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const overlayRoot = typeof document !== "undefined" ? document.body : null;
 
   const springTransition = { type: "spring" as const, stiffness: 340, damping: 32, mass: 0.84 };
   const pageTransition = reduceMotion ? { duration: 0 } : springTransition;
   const panelTransition = reduceMotion ? { duration: 0 } : { type: "spring" as const, stiffness: 360, damping: 34, mass: 0.82 };
   const sectionTransition = reduceMotion ? { duration: 0 } : { type: "spring" as const, stiffness: 350, damping: 34, mass: 0.82 };
   const drawerTransition = reduceMotion ? { duration: 0 } : { type: "spring" as const, stiffness: 360, damping: 34, mass: 0.8 };
+  const modalBackdropTransition = reduceMotion ? { duration: 0 } : { duration: 0.16, ease: motionEase };
+  const modalExitTransition = reduceMotion ? { duration: 0 } : { duration: 0.14, ease: [0.4, 0, 1, 1] as const };
+  const modalBackdropVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: modalBackdropTransition },
+    exit: { opacity: 0, transition: modalExitTransition }
+  };
+  const modalDialogVariants = reduceMotion
+    ? {
+        hidden: { opacity: 0, y: 0, scale: 1 },
+        visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0 } },
+        exit: { opacity: 0, y: 0, scale: 1, transition: { duration: 0 } }
+      }
+    : {
+        hidden: { opacity: 0, y: 18, scale: 0.985 },
+        visible: {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          transition: {
+            opacity: { duration: 0.18, delay: 0.05, ease: motionEase },
+            y: { duration: 0.2, delay: 0.05, ease: motionEase },
+            scale: { duration: 0.2, delay: 0.05, ease: motionEase }
+          }
+        },
+        exit: {
+          opacity: 0,
+          y: 12,
+          scale: 0.992,
+          transition: {
+            opacity: { duration: 0.12, ease: [0.4, 0, 1, 1] as const },
+            y: { duration: 0.14, ease: [0.4, 0, 1, 1] as const },
+            scale: { duration: 0.14, ease: [0.4, 0, 1, 1] as const }
+          }
+        }
+      };
   const sectionInitial = reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 };
   const sectionAnimate = { opacity: 1, y: 0 };
   const sectionExit = reduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 };
@@ -1561,12 +1599,12 @@ export function AdminPage({ user, section }: AdminPageProps) {
                       </div>
 
                       <div className="mobile-table-card__badges">
-                        <span className={levelPill(question.level)} style={{ fontSize: 11 }}>{titleCase(question.level)}</span>
                         <SelectionToggle
                           checked={selectedQuestionIds.includes(question.id)}
-                          label="Select question"
+                          label="Select"
                           onChange={() => toggleQuestionSelection(question.id)}
                         />
+                        <span className={levelPill(question.level)} style={{ fontSize: 11 }}>{titleCase(question.level)}</span>
                       </div>
                     </div>
 
@@ -2290,132 +2328,141 @@ export function AdminPage({ user, section }: AdminPageProps) {
         </motion.div>
       </motion.section>
 
-      <AnimatePresence>
-        {editingStudentId ? (
-          <motion.div
-            animate={{ opacity: 1 }}
-            className="student-result-overlay student-result-overlay--dialog admin-editor-overlay"
-            exit={{ opacity: 0 }}
-            initial={{ opacity: 0 }}
-            transition={pageTransition}
-          >
-            <button
-              aria-label="Close student editor"
-              className="student-result-overlay__backdrop"
-              disabled={studentEditLoading}
-              onClick={cancelStudentEdit}
-              type="button"
-            />
-
-            <motion.section
-              animate={{ opacity: 1, y: 0 }}
-              aria-modal="true"
-              className="panel student-submit-dialog admin-editor-dialog"
-              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
-              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
-              role="dialog"
-              transition={pageTransition}
+      {overlayRoot ? createPortal(
+        <AnimatePresence>
+          {editingStudentId ? (
+            <motion.div
+              className="student-result-overlay student-result-overlay--dialog admin-editor-overlay"
+              exit={{ opacity: 1 }}
+              initial={{ opacity: 1 }}
+              animate={{ opacity: 1 }}
             >
-              <span className="eyebrow">Edit student</span>
-              <h3>Update student access</h3>
-              <p>Update the student details here. Adding days extends active access from the current expiry, or starts from now if access already expired.</p>
+              <motion.button
+                aria-label="Close student editor"
+                className="student-result-overlay__backdrop"
+                animate="visible"
+                exit="exit"
+                initial="hidden"
+                disabled={studentEditLoading}
+                onClick={cancelStudentEdit}
+                variants={modalBackdropVariants}
+                type="button"
+              />
 
-              <div className="admin-editor-dialog__fields">
-                <label className="form-field">
-                  <span className="form-label">Gmail address</span>
-                  <input
-                    autoComplete="email"
-                    className="input"
-                    onChange={(event) => setEditingStudentDraft((current) => ({ ...current, email: event.target.value }))}
-                    placeholder="student@gmail.com"
-                    value={editingStudentDraft.email}
-                  />
-                </label>
+              <motion.section
+                animate="visible"
+                aria-modal="true"
+                className="panel student-submit-dialog admin-editor-dialog"
+                exit="exit"
+                initial="hidden"
+                role="dialog"
+                variants={modalDialogVariants}
+              >
+                <span className="eyebrow">Edit student</span>
+                <h3>Update student access</h3>
+                <p>Update the student details here. Adding days extends active access from the current expiry, or starts from now if access already expired.</p>
 
-                <label className="form-field">
-                  <span className="form-label">Full name</span>
-                  <input
-                    className="input"
-                    onChange={(event) => setEditingStudentDraft((current) => ({ ...current, name: event.target.value }))}
-                    placeholder="Student full name"
-                    value={editingStudentDraft.name}
-                  />
-                </label>
+                <div className="admin-editor-dialog__fields">
+                  <label className="form-field">
+                    <span className="form-label">Gmail address</span>
+                    <input
+                      autoComplete="email"
+                      className="input"
+                      onChange={(event) => setEditingStudentDraft((current) => ({ ...current, email: event.target.value }))}
+                      placeholder="student@gmail.com"
+                      value={editingStudentDraft.email}
+                    />
+                  </label>
 
-                <label className="form-field">
-                  <span className="form-label">Add access days</span>
-                  <input
-                    className="input"
-                    inputMode="numeric"
-                    onChange={(event) => setEditingStudentDraft((current) => ({ ...current, accessDays: event.target.value }))}
-                    placeholder="Add days from active expiry or from now if expired"
-                    value={editingStudentDraft.accessDays}
-                  />
-                </label>
-              </div>
+                  <label className="form-field">
+                    <span className="form-label">Full name</span>
+                    <input
+                      className="input"
+                      onChange={(event) => setEditingStudentDraft((current) => ({ ...current, name: event.target.value }))}
+                      placeholder="Student full name"
+                      value={editingStudentDraft.name}
+                    />
+                  </label>
 
-              <div className="admin-panel-note admin-panel-note--dialog">
-                Leave the access field empty if you only want to update the name or Gmail address.
-              </div>
+                  <label className="form-field">
+                    <span className="form-label">Add access days</span>
+                    <input
+                      className="input"
+                      inputMode="numeric"
+                      onChange={(event) => setEditingStudentDraft((current) => ({ ...current, accessDays: event.target.value }))}
+                      placeholder="Add days from active expiry or from now if expired"
+                      value={editingStudentDraft.accessDays}
+                    />
+                  </label>
+                </div>
 
-              <div className="student-submit-dialog__actions admin-editor-dialog__actions">
-                <button className="button" disabled={studentEditLoading} onClick={cancelStudentEdit} type="button">
-                  Cancel
-                </button>
-                <button className="button button--primary" disabled={studentEditLoading} onClick={() => void submitStudentEdit()} type="button">
-                  {studentEditLoading ? "Saving..." : "Save student"}
-                </button>
-              </div>
-            </motion.section>
-          </motion.div>
-        ) : null}
+                <div className="admin-panel-note admin-panel-note--dialog">
+                  Leave the access field empty if you only want to update the name or Gmail address.
+                </div>
 
-        {confirmState ? (
-          <motion.div
-            animate={{ opacity: 1 }}
-            className="student-result-overlay student-result-overlay--dialog admin-confirm-overlay"
-            exit={{ opacity: 0 }}
-            initial={{ opacity: 0 }}
-            transition={pageTransition}
-          >
-            <button
-              aria-label="Close confirmation"
-              className="student-result-overlay__backdrop"
-              disabled={confirmLoading}
-              onClick={closeConfirmation}
-              type="button"
-            />
+                <div className="student-submit-dialog__actions admin-editor-dialog__actions">
+                  <button className="button" disabled={studentEditLoading} onClick={cancelStudentEdit} type="button">
+                    Cancel
+                  </button>
+                  <button className="button button--primary" disabled={studentEditLoading} onClick={() => void submitStudentEdit()} type="button">
+                    {studentEditLoading ? "Saving..." : "Save student"}
+                  </button>
+                </div>
+              </motion.section>
+            </motion.div>
+          ) : null}
 
-            <motion.section
-              animate={{ opacity: 1, y: 0 }}
-              aria-modal="true"
-              className="panel student-submit-dialog admin-confirm-dialog"
-              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
-              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
-              role="alertdialog"
-              transition={pageTransition}
+          {confirmState ? (
+            <motion.div
+              className="student-result-overlay student-result-overlay--dialog admin-confirm-overlay"
+              exit={{ opacity: 1 }}
+              initial={{ opacity: 1 }}
+              animate={{ opacity: 1 }}
             >
-              <span className="eyebrow">{confirmState.eyebrow}</span>
-              <h3>{confirmState.title}</h3>
-              <p>{confirmState.description}</p>
+              <motion.button
+                aria-label="Close confirmation"
+                className="student-result-overlay__backdrop"
+                animate="visible"
+                exit="exit"
+                initial="hidden"
+                disabled={confirmLoading}
+                onClick={closeConfirmation}
+                variants={modalBackdropVariants}
+                type="button"
+              />
 
-              <div className="student-submit-dialog__actions admin-confirm-dialog__actions">
-                <button className="button" disabled={confirmLoading} onClick={closeConfirmation} type="button">
-                  Cancel
-                </button>
-                <button
-                  className={`button ${confirmState.confirmTone === "danger" ? "button--danger" : "button--primary"}`}
-                  disabled={confirmLoading}
-                  onClick={() => void handleConfirmation()}
-                  type="button"
-                >
-                  {confirmLoading ? "Working..." : confirmState.confirmLabel}
-                </button>
-              </div>
-            </motion.section>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+              <motion.section
+                animate="visible"
+                aria-modal="true"
+                className="panel student-submit-dialog admin-confirm-dialog"
+                exit="exit"
+                initial="hidden"
+                role="alertdialog"
+                variants={modalDialogVariants}
+              >
+                <span className="eyebrow">{confirmState.eyebrow}</span>
+                <h3>{confirmState.title}</h3>
+                <p>{confirmState.description}</p>
+
+                <div className="student-submit-dialog__actions admin-confirm-dialog__actions">
+                  <button className="button" disabled={confirmLoading} onClick={closeConfirmation} type="button">
+                    Cancel
+                  </button>
+                  <button
+                    className={`button ${confirmState.confirmTone === "danger" ? "button--danger" : "button--primary"}`}
+                    disabled={confirmLoading}
+                    onClick={() => void handleConfirmation()}
+                    type="button"
+                  >
+                    {confirmLoading ? "Working..." : confirmState.confirmLabel}
+                  </button>
+                </div>
+              </motion.section>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>,
+        overlayRoot
+      ) : null}
     </>
   );
 }

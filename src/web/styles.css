@@ -1496,23 +1496,32 @@ input[type="checkbox"] {
 .auth-progress-overlay {
   position: fixed;
   inset: 0;
-  z-index: 220;
+  z-index: 240;
   display: grid;
   place-items: center;
+  align-content: center;
+  justify-content: center;
   padding:
     max(24px, env(safe-area-inset-top, 0px))
     max(16px, env(safe-area-inset-right, 0px))
     max(24px, env(safe-area-inset-bottom, 0px))
     max(16px, env(safe-area-inset-left, 0px));
-  background: color-mix(in srgb, var(--bg-root) 84%, rgba(2, 6, 23, 0.78));
+  overflow: hidden;
+  isolation: isolate;
+  background: rgba(2, 6, 23, 0.72);
   backdrop-filter: blur(22px) saturate(1.06);
   -webkit-backdrop-filter: blur(22px) saturate(1.06);
+}
+
+[data-theme="light"] .auth-progress-overlay {
+  background: rgba(226, 232, 240, 0.72);
 }
 
 .auth-progress-card {
   display: grid;
   gap: 14px;
   width: min(460px, calc(100vw - 32px));
+  margin: auto;
   padding: 26px;
   border: 1px solid var(--border);
   border-radius: 26px;
@@ -4036,20 +4045,28 @@ input[type="checkbox"] {
 .student-result-overlay {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: 210;
   display: grid;
   justify-items: center;
   align-items: start;
+  align-content: start;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   padding: clamp(30px, 6vh, 54px) 24px 24px;
+  isolation: isolate;
 }
 
 .student-result-overlay--dialog {
+  justify-items: center;
   align-items: center;
+  justify-content: center;
   align-content: center;
-  padding: 24px;
+  padding:
+    max(24px, env(safe-area-inset-top, 0px))
+    max(16px, env(safe-area-inset-right, 0px))
+    max(24px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
 }
 
 .student-result-overlay__backdrop {
@@ -4062,9 +4079,13 @@ input[type="checkbox"] {
 }
 
 .student-result-overlay--dialog .student-result-overlay__backdrop {
-  background: rgba(2, 6, 23, 0.68);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
+  background: rgba(2, 6, 23, 0.7);
+  -webkit-backdrop-filter: blur(18px) saturate(1.04);
+  backdrop-filter: blur(18px) saturate(1.04);
+}
+
+[data-theme="light"] .student-result-overlay--dialog .student-result-overlay__backdrop {
+  background: rgba(226, 232, 240, 0.68);
 }
 
 .student-result-overlay__frame {
@@ -4191,6 +4212,7 @@ input[type="checkbox"] {
   position: relative;
   z-index: 1;
   width: min(520px, 100%);
+  margin: auto;
   max-height: calc(100dvh - 48px);
   overflow-y: auto;
   display: grid;
@@ -5045,7 +5067,9 @@ input[type="checkbox"] {
 }
 
 .mobile-table-card--question .mobile-table-card__badges {
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-start;
 }
 
 .mobile-table-card--question .mobile-table-card__prompt {

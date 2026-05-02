@@ -62,9 +62,19 @@ export function openPostgresPool(connectionString: string): PostgresPool {
     max: 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
-    statement_timeout: 10_000
+    statement_timeout: 10_000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000
   } as unknown as ConstructorParameters<typeof Pool>[0];
   const pool = new Pool(poolConfig);
+
+  // Handle idle client errors gracefully instead of crashing the process.
+  // Railway (and other cloud proxies) routinely reset idle TCP connections,
+  // which causes pg to emit 'error' on the pool. Without this handler
+  // Node.js treats the unhandled 'error' event as fatal and exits.
+  pool.on("error", (err) => {
+    console.error("[pg-pool] Idle client error (connection will be recycled):", err.message);
+  });
 
   poolCache.set(normalized, pool);
   return pool;
@@ -78,8 +88,31 @@ export async function applyPostgresSchema(pool: PostgresPool, rootDir = process.
 
   const schemaPath = join(rootDir, "database", "schema.sql");
   const schemaSql = readFileSync(schemaPath, "utf8");
-  await pool.query(schemaSql);
-  schemaApplied.add(cacheKey);
+
+  // Retry schema application to handle transient connection timeouts
+  // during Railway cold starts or proxy reconnections.
+  const maxRetries = 3;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await pool.query(schemaSql);
+      schemaApplied.add(cacheKey);
+      return;
+    } catch (error) {
+      const isRetryable =
+        error instanceof Error &&
+        (error.message.includes("Connection terminated") ||
+         error.message.includes("ECONNRESET") ||
+         error.message.includes("timeout"));
+
+      if (!isRetryable || attempt === maxRetries) {
+        throw error;
+      }
+
+      const delayMs = attempt * 2_000;
+      console.warn(`[pg] Schema apply failed (attempt ${attempt}/${maxRetries}), retrying in ${delayMs}ms:`, error.message);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
 }
 
 export async function withPostgresTransaction<T>(

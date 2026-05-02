@@ -339,17 +339,20 @@ export function App() {
       : user.email
     : "";
   const isPublicAuthPage = !user && PUBLIC_AUTH_PATHS.has(location.pathname);
+  const isLegalPage = location.pathname === "/privacy" || location.pathname === "/terms";
   const isAdminWorkspaceRoute = location.pathname.startsWith("/admin/");
   const isStudentWorkspaceRoute = location.pathname.startsWith("/student/") && !PUBLIC_AUTH_PATHS.has(location.pathname);
   const isWorkspaceRoute = Boolean(user) && (isAdminWorkspaceRoute || isStudentWorkspaceRoute);
   const isAdminWorkspacePage = Boolean(user?.role === "admin" && isAdminWorkspaceRoute);
   const routeTransitionKey = isPublicAuthPage
     ? "public-auth"
-    : isAdminWorkspaceRoute
-      ? "admin-workspace"
-      : isStudentWorkspaceRoute
-        ? "student-workspace"
-        : location.pathname;
+    : isLegalPage
+      ? "legal"
+      : isAdminWorkspaceRoute
+        ? "admin-workspace"
+        : isStudentWorkspaceRoute
+          ? "student-workspace"
+          : location.pathname;
   const routeMotion = reduceMotion
     ? {
         initial: { opacity: 1, y: 0 },
@@ -360,7 +363,7 @@ export function App() {
     : {
         initial: { opacity: 0, y: 14 },
         animate: { opacity: 1, y: 0 },
-        exit: isPublicAuthPage ? { opacity: 1, y: 0, transition: { duration: 0 } } : { opacity: 0, y: 10 },
+        exit: (isPublicAuthPage || isLegalPage) ? { opacity: 1, y: 0, transition: { duration: 0 } } : { opacity: 0, y: 10 },
         transition: {
           type: "spring" as const,
           stiffness: 360,

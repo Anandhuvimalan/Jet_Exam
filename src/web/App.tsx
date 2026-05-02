@@ -9,6 +9,8 @@ import { SkeletonDashboard } from "./components/Skeleton";
 import { preloadWorkspaceRoute, loadAdminPageModule, loadStudentPageModule } from "./page-loaders";
 import type { AdminSection } from "./pages/AdminPage";
 import { AuthPage } from "./pages/AuthPage";
+import { PrivacyPage } from "./pages/PrivacyPage";
+import { TermsPage } from "./pages/TermsPage";
 import type { StudentSection } from "./pages/StudentPage";
 
 type Theme = "dark" | "light";
@@ -708,6 +710,8 @@ export function App() {
                   }
                 />
 
+                <Route path="/privacy" element={<PrivacyPage />} />
+                <Route path="/terms" element={<TermsPage />} />
                 <Route path="*" element={<Navigate replace to={homePath} />} />
               </Routes>
             </motion.div>

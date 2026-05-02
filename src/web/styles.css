@@ -8790,3 +8790,135 @@ html {
     scroll-behavior: auto;
   }
 }
+
+/* --- Legal pages (Privacy Policy, Terms of Service) --- */
+
+.legal-page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 24px 0 64px;
+}
+
+.legal-page__container {
+  padding: 32px clamp(20px, 4vw, 40px);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(18px);
+}
+
+.legal-page__header {
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.legal-page__header h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  font-weight: 800;
+  color: var(--text-heading);
+  margin: 8px 0 0;
+}
+
+.legal-page__updated {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+.legal-page__content {
+  display: grid;
+  gap: 28px;
+}
+
+.legal-page__content section {
+  display: grid;
+  gap: 10px;
+}
+
+.legal-page__content h2 {
+  font-family: var(--font-display);
+  font-size: 1.18rem;
+  font-weight: 700;
+  color: var(--text-heading);
+  margin: 0;
+}
+
+.legal-page__content h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-heading);
+  margin: 6px 0 0;
+}
+
+.legal-page__content p {
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.legal-page__content ul {
+  margin: 4px 0 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 6px;
+}
+
+.legal-page__content li {
+  font-size: 0.93rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.legal-page__content a {
+  color: var(--primary-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+
+.legal-page__content a:hover {
+  color: var(--accent-strong);
+}
+
+.legal-page__content strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.legal-page__footer {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+/* --- Auth page legal footer --- */
+
+.auth-legal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.auth-legal-footer a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+
+.auth-legal-footer a:hover {
+  color: var(--primary-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auth-legal-footer span {
+  opacity: 0.4;
+}

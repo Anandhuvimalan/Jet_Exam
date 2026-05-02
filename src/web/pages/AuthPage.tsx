@@ -1,6 +1,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { Link } from "react-router-dom";
 import type { AuthStatusResponse, GoogleAuthRequest } from "../../shared/types";
 import { loginWithGoogle } from "../api";
 import { AuthFlowFieldBackground } from "../components/AuthFlowFieldBackground";
@@ -266,6 +267,12 @@ export function AuthPage({ applyAuthStatus, authStatus, refreshAuth, view }: Aut
       </div>
 
       {progressOverlay}
+
+      <footer className="auth-legal-footer">
+        <Link to="/privacy">Privacy Policy</Link>
+        <span aria-hidden="true">·</span>
+        <Link to="/terms">Terms of Service</Link>
+      </footer>
     </section>
   );
 }
